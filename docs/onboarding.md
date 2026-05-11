@@ -150,10 +150,10 @@ Con las variables de entorno configuradas y las dependencias instaladas, es posi
     python manage.py migrate
     ```
 
-    > [!Note]
-    > En caso de que el proyecto esté configurado en desarrollo `PRODUCTION=False` se crea o actualiza el archivo `db.sqlite3`.
-    >
-    > En caso contrario, se aplican las migraciones a la base de datos PostgreSQL configurada en las [variables de entorno](./virtual-env.md).
+> [!Note]
+> En caso de que el proyecto esté configurado en desarrollo `PRODUCTION=False` se crea o actualiza el archivo `db.sqlite3`.
+>
+> En caso contrario, se aplican las migraciones a la base de datos PostgreSQL configurada en las [variables de entorno](./virtual-env.md).
 
 2. Ejecutar el proyecto
     ```sh
