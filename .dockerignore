@@ -1,0 +1,101 @@
+# Environment variables
+.env
+.env.*
+# Dockerignore for Django project
+# Everything in .gitignore
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+*.log
+local_settings.py
+db.sqlite3
+media
+staticfiles
+static/
+*.manifest
+*.spec
+pip-log.txt
+pip-delete-this-directory.txt
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+*.mo
+*.pot
+**/migrations/*.pyc
+**/migrations/*.pyo
+**/migrations/__pycache__/
+.vscode/
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.git/
+.gitignore
+.gitattributes
+.gitmodules
+.gitkeep
+
+# Exclude all Markdown files
+*.md
+
+# Exclude test files and folders
+test/
+tests/
+**/test_*
+**/tests_*
+**/test*/
+**/tests*/
+
+# Exclude license files
+LICENSE
+LICENSE.*
+license*
+
+# Exclude everything related to git
+.git/
+.github/
+.gitignore
+.gitattributes
+.gitmodules
+.gitkeep
+.pre-commit-config.yaml
+
+# ruff
+.ruff_cache/
+
+# docs
+docs/
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore

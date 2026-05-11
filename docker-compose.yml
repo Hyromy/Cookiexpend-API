@@ -1,0 +1,76 @@
+services:
+  app:
+    build: .
+    container_name: cookiexpend-api
+    ports:
+      - "8000:8000"
+
+    environment:
+      - PRODUCTION=True
+      - DJANGO_SECRET_KEY=this-is-not-secure-but-it-is-for-demo-purposes-only-so-be-careful
+      
+      - HOSTS=127.0.0.1, localhost, cookiexpend-api
+      - SESSION_DOMAIN=localhost
+      
+      - DB_NAME=postgres
+      - DB_USER=postgres
+      - DB_PASS=postgres
+      - DB_HOST=cookiexpend-db
+      - DB_PORT=5432
+      
+      - REDIS_URL=redis://cookiexpend-redis:6379/0
+
+    networks:
+      - cookiexpend-network
+
+    depends_on:
+      db:
+        condition: service_healthy
+
+      redis:
+        condition: service_healthy
+
+  db:
+    image: postgres:18-alpine
+    container_name: cookiexpend-db
+    ports:
+      - "5432:5432"
+
+    environment:
+      - POSTGRES_DB=postgres
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+
+    volumes:
+      - db_data:/var/lib/postgresql/data
+
+    networks:
+      - cookiexpend-network
+    
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: cookiexpend-redis
+    ports:
+      - "6379:6379"
+
+    networks:
+      - cookiexpend-network
+
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  db_data:
+
+networks:
+  cookiexpend-network:
+    driver: bridge

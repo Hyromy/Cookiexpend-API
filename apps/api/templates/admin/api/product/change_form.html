@@ -1,0 +1,12 @@
+{% extends "admin/change_form.html" %}
+
+{% block submit_buttons_bottom %}
+  {{ block.super }}
+  {% if original %}
+    {% if original.deleted_at %}
+      <input type="submit" name="_activate" value="Activate" class="button" />
+    {% else %}
+      <input type="submit" name="_deactivate" value="Deactivate" class="button" />
+    {% endif %}
+  {% endif %}
+{% endblock %}
