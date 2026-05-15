@@ -282,7 +282,7 @@ class TestApiViews:
         assert retrieve.status_code == 404
 
     @pytest.mark.django_db
-    def test_events_streams_messages(self, api_client):
+    def test_events_streams_messages(self, user):
         class FakePubSub:
             def __init__(self):
                 self.closed = False
@@ -298,9 +298,12 @@ class TestApiViews:
                 self.closed = True
 
         fake = FakePubSub()
+        client = APIClient()
+        client.force_login(user)
+
         with patch("apps.api.views.redis_client") as redis_mock:
             redis_mock.pubsub.return_value = fake
-            response = api_client.get("/api/events/")
+            response = client.get("/api/events/")
             chunks = []
             for chunk in response.streaming_content:
                 if isinstance(chunk, bytes):
@@ -320,7 +323,7 @@ class TestApiViews:
         assert fake.closed is True
 
     @pytest.mark.django_db
-    def test_events_handles_redis_error(self, api_client):
+    def test_events_handles_redis_error(self, user):
         class FakePubSub:
             def __init__(self):
                 self.closed = False
@@ -335,9 +338,12 @@ class TestApiViews:
                 self.closed = True
 
         fake = FakePubSub()
+        client = APIClient()
+        client.force_login(user)
+
         with patch("apps.api.views.redis_client") as redis_mock:
             redis_mock.pubsub.return_value = fake
-            response = api_client.get("/api/events/")
+            response = client.get("/api/events/")
             chunks = []
             for chunk in response.streaming_content:
                 if isinstance(chunk, bytes):
@@ -485,7 +491,7 @@ class TestGossiper:
         with pytest.raises(ValueError):
             event_name("product", "invalid")
 
-    def test_redis_payload_removes_fields(self):
+    def test_redis_payload_includes_envelope(self):
         data = {
             "id": 1,
             "name": "cookie",
@@ -498,26 +504,33 @@ class TestGossiper:
             version=2,
             updated_at="2026-05-10T00:00:00Z",
             source="test",
+            model="product",
+            action="created",
         )
 
-        assert payload["data"] == {"id": 1, "name": "cookie"}
+        assert payload["data"] == data
         assert payload["version"] == 2
         assert payload["updated_at"] == "2026-05-10T00:00:00Z"
         assert payload["source"] == "test"
-        assert "version" not in data
-        assert "updated_at" not in data
+        assert payload["model"] == "product"
+        assert payload["action"] == "created"
 
-    def test_redis_payload_missing_fields_raises(self):
+    def test_redis_payload_missing_fields_allows_none(self):
         data = {"id": 1, "name": "cookie"}
 
-        with pytest.raises(KeyError):
-            redis_payload(
-                data,
-                event="cookiexpend.product.created",
-                version=1,
-                updated_at="2026-05-10T00:00:00Z",
-                source="test",
-            )
+        payload = redis_payload(
+            data,
+            event="cookiexpend.product.created",
+            version=None,
+            updated_at=None,
+            source="test",
+            model="product",
+            action="created",
+        )
+
+        assert payload["data"] == data
+        assert payload["version"] is None
+        assert payload["updated_at"] is None
 
     def test_publish_handler_calls_publish_on_redis(self):
         data = {
@@ -532,7 +545,7 @@ class TestGossiper:
         channel, payload = publish_mock.call_args.args
         assert channel == "cookiexpend.product.created"
         assert payload["event"] == "cookiexpend.product.created"
-        assert payload["data"] == {"id": 1, "name": "cookie"}
+        assert payload["data"] == data
 
 
 class TestAdmin:

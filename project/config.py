@@ -23,9 +23,9 @@ class Config(BaseSettings):
     USE_SSL: bool = False
 
     HOSTS: str = Field(default="*")
-    CORS_ALLOWED: str = Field(default="")
-    CSRF_TRUSTED: str = Field(default="")
-    SESSION_DOMAIN: str | None = None
+    CORS_ALLOWED: str = Field(default="http://localhost:5173, http://127.0.0.1:5173")
+    CSRF_TRUSTED: str = Field(default="http://localhost:5173, http://127.0.0.1:5173")
+    SESSION_DOMAIN: str = Field(default="localhost")
 
     DB_NAME: str | None = None
     DB_USER: str | None = None

@@ -23,20 +23,18 @@ def api_client():
 
 
 @pytest.mark.django_db
-def test_logout_anonymous(client):
-    with patch("apps._auth.views.logout") as logout_mock:
-        response = client.post("/auth/logout/")
+def test_logout_anonymous(api_client):
+    with patch("apps._auth.views.logout"):
+        response = api_client.post("/auth/logout/")
 
-    assert response.status_code == 200
-    assert response.json() == {"success": True, "was_authenticated": False}
-    logout_mock.assert_called_once()
+    assert response.status_code == 401
 
 
 @pytest.mark.django_db
-def test_logout_authenticated(client, user):
-    assert client.login(username=user.username, password="pass1234")
+def test_logout_authenticated(api_client, user):
+    api_client.force_authenticate(user=user)
     with patch("apps._auth.views.logout") as logout_mock:
-        response = client.post("/auth/logout/")
+        response = api_client.post("/auth/logout/")
 
     assert response.status_code == 200
     assert response.json() == {"success": True, "was_authenticated": True}
@@ -115,7 +113,8 @@ def test_token_refresh_missing_field(api_client):
 
 
 @pytest.mark.django_db
-def test_logout_get_not_allowed(client):
-    response = client.get("/auth/logout/")
+def test_logout_get_not_allowed(api_client, user):
+    api_client.force_authenticate(user=user)
+    response = api_client.get("/auth/logout/")
 
-    assert response.status_code in {400, 405}
+    assert response.status_code == 405
