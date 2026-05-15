@@ -137,11 +137,7 @@ if not DEBUG:
         "rest_framework.renderers.JSONRenderer",
     ]
 
-if DEBUG:
-    CORS_ALLOW_ALL_ORIGINS = True
-else:
-    CORS_ALLOWED_ORIGINS = config.CORS_ALLOWED_LIST
-
+CORS_ALLOWED_ORIGINS = config.CORS_ALLOWED_LIST
 CORS_ALLOW_CREDENTIALS = True
 
 CORS_ALLOW_HEADERS = [
@@ -161,7 +157,7 @@ CORS_ALLOW_HEADERS = [
 CSRF_COOKIE_NAME = "csrftoken"
 CSRF_HEADER_NAME = "HTTP_X_CSRFTOKEN"
 CSRF_TRUSTED_ORIGINS = config.CSRF_TRUSTED_LIST
-CSRF_COOKIE_HTTPONLY = True
+CSRF_COOKIE_HTTPONLY = config.PRODUCTION
 if not DEBUG and config.SESSION_DOMAIN:
     CSRF_COOKIE_DOMAIN = config.SESSION_DOMAIN
     SESSION_COOKIE_DOMAIN = config.SESSION_DOMAIN
@@ -243,3 +239,8 @@ SIMPLE_JWT = {
     "USER_ID_FIELD": "id",
     "USER_ID_CLAIM": "user_id",
 }
+
+AUTHENTICATION_BACKENDS = [
+    "apps._auth.backends.EmailOrUsernameModelBackend",
+    "django.contrib.auth.backends.ModelBackend",
+]

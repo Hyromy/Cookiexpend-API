@@ -6,8 +6,6 @@ Para configurar manualmente dichas variables, crea una copia del archivo `.env.e
 
 ## Configuración general 
 
-texto de para que es esta seccion
-
 ### `PRODUCTION`
 
 Define el modo de ejecución del proyecto entre desarrollo (`False`) y producción (`True`).
