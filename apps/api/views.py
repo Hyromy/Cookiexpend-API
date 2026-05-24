@@ -15,6 +15,10 @@ from .gossiper import (
     publish_handler,
     redis_client,
 )
+from .permissions import (
+    any_of,
+    permission,
+)
 
 logger = getLogger(__name__)
 
@@ -65,6 +69,12 @@ class ProductViewSet(MixinViewSet):
     model_name = "product"
     queryset = models.Product.objects.all()
     serializer_class = serializers.ProductSerializer
+    permission_classes = [
+        any_of(
+            permission(user=["Store manager"], can=["see"]),
+            permission(user=["Factory manager"], can=["see", "create", "update", "delete"]),
+        )
+    ]
 
 
 class DeliveryViewSet(MixinViewSet):
