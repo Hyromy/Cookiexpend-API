@@ -6,7 +6,19 @@ from redis import from_url as redis_from_url
 
 from project.config import config
 
-MODEL = Literal["product",]
+MODEL = Literal[
+    "product",
+    "establishment",
+    "factory",
+    "store",
+    "delivery",
+    "inventory",
+    "sell",
+    "payment_method",
+    "package",
+    "sell_detail",
+    "payment",
+]
 MODEL_VALUES = MODEL.__args__
 
 EVENT = Literal[

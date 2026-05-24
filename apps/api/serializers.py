@@ -1,20 +1,155 @@
 from rest_framework import serializers
 
-from .models import (
-    Product,
-)
+from . import models
+
+
+def _basic_fields(*args) -> list[str]:
+    """Helper function to generate basic fields for serializers, including id, created_at, updated_at, and version."""
+
+    return ["id"] + list(args) + ["created_at", "updated_at", "version"]
+
+
+def _unique_name_validator(model_class, instance, value):
+    """Helper function to validate that the name field is unique among active (not soft-deleted) instances of the model."""
+
+    queryset = model_class.objects.filter(name=value)
+    if instance is not None:
+        queryset = queryset.exclude(pk=instance.pk)
+
+    if queryset.exists():
+        raise serializers.ValidationError(
+            f"A {model_class._meta.verbose_name} with this name already exists."
+        )
+
+    return value
+
+
+class EstablishmentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = models.Establishment
+        fields = _basic_fields("name", "municipality", "neighborhood", "street", "number")
+        read_only_fields = _basic_fields()
+
+    def validate_name(self, value: str) -> str:
+        return _unique_name_validator(models.Establishment, self.instance, value)
+
+
+class FactorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = models.Factory
+        fields = _basic_fields("establishment")
+        read_only_fields = _basic_fields()
+
+    def to_representation(self, instance):
+        res = super().to_representation(instance)
+        res["establishment"] = EstablishmentSerializer(instance.establishment).data
+        return res
+
+
+class StoreSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = models.Store
+        fields = _basic_fields("establishment")
+        read_only_fields = _basic_fields()
+
+    def to_representation(self, instance):
+        res = super().to_representation(instance)
+        res["establishment"] = EstablishmentSerializer(instance.establishment).data
+        return res
 
 
 class ProductSerializer(serializers.ModelSerializer):
     class Meta:
-        model = Product
-        fields = ["id", "name", "description", "price", "created_at", "updated_at", "version"]
-        read_only_fields = ["id", "created_at", "updated_at", "version"]
+        model = models.Product
+        fields = _basic_fields("name", "price")
+        read_only_fields = _basic_fields()
 
     def validate_name(self, value: str) -> str:
-        queryset = Product.objects.filter(name=value)
-        if self.instance is not None:
-            queryset = queryset.exclude(pk=self.instance.pk)
-        if queryset.exists():
-            raise serializers.ValidationError("A product with this name already exists.")
-        return value
+        return _unique_name_validator(models.Product, self.instance, value)
+
+
+class DeliverySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = models.Delivery
+        fields = _basic_fields("store", "factory")
+        read_only_fields = _basic_fields()
+
+    def to_representation(self, instance):
+        res = super().to_representation(instance)
+        res["store"] = StoreSerializer(instance.store).data
+        res["factory"] = FactorySerializer(instance.factory).data
+        return res
+
+
+class InventorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = models.Inventory
+        fields = _basic_fields("store", "product", "quantity")
+        read_only_fields = _basic_fields()
+
+    def to_representation(self, instance):
+        res = super().to_representation(instance)
+        res["store"] = StoreSerializer(instance.store).data
+        res["product"] = ProductSerializer(instance.product).data
+        return res
+
+
+class SellSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = models.Sell
+        fields = _basic_fields("store", "date", "total")
+        read_only_fields = _basic_fields()
+
+    def to_representation(self, instance):
+        res = super().to_representation(instance)
+        res["store"] = StoreSerializer(instance.store).data
+        return res
+
+
+class PaymentMethodSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = models.PaymentMethod
+        fields = _basic_fields("name")
+        read_only_fields = _basic_fields()
+
+    def validate_name(self, value: str) -> str:
+        return _unique_name_validator(models.PaymentMethod, self.instance, value)
+
+
+class PackageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = models.Package
+        fields = _basic_fields("delivery", "product", "quantity")
+        read_only_fields = _basic_fields()
+
+    def to_representation(self, instance):
+        res = super().to_representation(instance)
+        res["delivery"] = DeliverySerializer(instance.delivery).data
+        res["product"] = ProductSerializer(instance.product).data
+        return res
+
+
+class SellDetailSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = models.SellDetail
+        fields = _basic_fields("sell", "product", "quantity", "price")
+        read_only_fields = _basic_fields()
+
+    def to_representation(self, instance):
+        res = super().to_representation(instance)
+        res["sell"] = SellSerializer(instance.sell).data
+        res["product"] = ProductSerializer(instance.product).data
+        return res
+
+
+class PaymentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = models.Payment
+        fields = _basic_fields("sell", "payment_method", "amount")
+        read_only_fields = _basic_fields()
+
+    def to_representation(self, instance):
+        res = super().to_representation(instance)
+        res["sell"] = SellSerializer(instance.sell).data
+        res["payment_method"] = PaymentMethodSerializer(instance.payment_method).data
+        return res

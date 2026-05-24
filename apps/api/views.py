@@ -11,6 +11,7 @@ from rest_framework.response import Response
 
 from . import models, serializers
 from .gossiper import (
+    MODEL,
     publish_handler,
     redis_client,
 )
@@ -20,24 +21,92 @@ logger = getLogger(__name__)
 source = "api request"
 
 
-class ProductViewSet(viewsets.ModelViewSet):
-    queryset = models.Product.objects.all()
-    serializer_class = serializers.ProductSerializer
+class MixinViewSet(viewsets.ModelViewSet):
+    """Mixin viewset to handle common logic, publishing events to Redis on create, update, and delete operations."""
 
-    def perform_create(self, serializer: serializers.ProductSerializer):
-        instance: models.Product = serializer.save()
-        publish_handler("product", "created", serializers.ProductSerializer(instance).data, source)
+    model_name: MODEL
 
-    def perform_update(self, serializer: serializers.ProductSerializer):
-        instance: models.Product = serializer.save()
+    def perform_create(self, serializer):
+        serializer.save()
+        publish_handler(self.model_name, "created", serializer.data, source)
+
+    def perform_update(self, serializer):
+        instance = serializer.save()
         instance.version += 1
         instance.save()
 
-        publish_handler("product", "updated", serializers.ProductSerializer(instance).data, source)
+        publish_handler(self.model_name, "updated", serializer.data, source)
 
-    def perform_destroy(self, instance: models.Product):
+    def perform_destroy(self, instance):
+        data = self.get_serializer(instance).data
         instance.delete()
-        publish_handler("product", "deleted", serializers.ProductSerializer(instance).data, source)
+        publish_handler(self.model_name, "deleted", data, source)
+
+
+class EstablishmentViewSet(MixinViewSet):
+    model_name = "establishment"
+    queryset = models.Establishment.objects.all()
+    serializer_class = serializers.EstablishmentSerializer
+
+
+class FactoryViewSet(MixinViewSet):
+    model_name = "factory"
+    queryset = models.Factory.objects.all()
+    serializer_class = serializers.FactorySerializer
+
+
+class StoreViewSet(MixinViewSet):
+    model_name = "store"
+    queryset = models.Store.objects.all()
+    serializer_class = serializers.StoreSerializer
+
+
+class ProductViewSet(MixinViewSet):
+    model_name = "product"
+    queryset = models.Product.objects.all()
+    serializer_class = serializers.ProductSerializer
+
+
+class DeliveryViewSet(MixinViewSet):
+    model_name = "delivery"
+    queryset = models.Delivery.objects.all()
+    serializer_class = serializers.DeliverySerializer
+
+
+class InventoryViewSet(MixinViewSet):
+    model_name = "inventory"
+    queryset = models.Inventory.objects.all()
+    serializer_class = serializers.InventorySerializer
+
+
+class SellViewSet(MixinViewSet):
+    model_name = "sell"
+    queryset = models.Sell.objects.all()
+    serializer_class = serializers.SellSerializer
+
+
+class PaymentMethodViewSet(MixinViewSet):
+    model_name = "payment_method"
+    queryset = models.PaymentMethod.objects.all()
+    serializer_class = serializers.PaymentMethodSerializer
+
+
+class PackageViewSet(MixinViewSet):
+    model_name = "package"
+    queryset = models.Package.objects.all()
+    serializer_class = serializers.PackageSerializer
+
+
+class SellDetailViewSet(MixinViewSet):
+    model_name = "sell_detail"
+    queryset = models.SellDetail.objects.all()
+    serializer_class = serializers.SellDetailSerializer
+
+
+class PaymentViewSet(MixinViewSet):
+    model_name = "payment"
+    queryset = models.Payment.objects.all()
+    serializer_class = serializers.PaymentSerializer
 
 
 @require_GET

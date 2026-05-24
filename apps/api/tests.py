@@ -8,6 +8,7 @@ from django.contrib.sessions.middleware import SessionMiddleware
 from django.test import RequestFactory
 from rest_framework.test import APIClient
 
+from . import models
 from .admin import ProductAdmin
 from .gossiper import event_name, publish_handler, redis_payload
 from .models import Product
@@ -45,7 +46,7 @@ def jwt_client(user):
 
 @pytest.fixture()
 def product(db):
-    return Product.objects.create(name="cookie", description="choco", price="5.00")
+    return Product.objects.create(name="cookie", price="5.00")
 
 
 @pytest.fixture()
@@ -92,6 +93,123 @@ def _admin_post_request(rf, admin_user, path, data):
     return request
 
 
+CRUD_ENDPOINTS = (
+    ("establishments", models.Establishment),
+    ("factories", models.Factory),
+    ("stores", models.Store),
+    ("deliveries", models.Delivery),
+    ("inventories", models.Inventory),
+    ("sells", models.Sell),
+    ("payment-methods", models.PaymentMethod),
+    ("packages", models.Package),
+    ("sell-details", models.SellDetail),
+    ("payments", models.Payment),
+)
+
+
+def _create_establishment(name="Cookiexpend"):
+    return models.Establishment.objects.create(
+        name=name,
+        municipality="Springfield",
+        neighborhood="Central",
+        street="Main",
+        number="123",
+    )
+
+
+def _create_product(name="cookie"):
+    return models.Product.objects.create(name=name, price="5.00")
+
+
+def _create_factory(establishment=None):
+    if establishment is None:
+        establishment = _create_establishment("Factory")
+    return models.Factory.objects.create(establishment=establishment)
+
+
+def _create_store(establishment=None):
+    if establishment is None:
+        establishment = _create_establishment("Store")
+    return models.Store.objects.create(establishment=establishment)
+
+
+def _create_delivery(factory=None, store=None):
+    if factory is None and store is None:
+        establishment = _create_establishment("Delivery")
+        factory = _create_factory(establishment)
+        store = _create_store(establishment)
+    elif factory is None:
+        factory = _create_factory(store.establishment)
+    elif store is None:
+        store = _create_store(factory.establishment)
+
+    return models.Delivery.objects.create(factory=factory, store=store)
+
+
+def _create_sell(store=None):
+    if store is None:
+        store = _create_store()
+    return models.Sell.objects.create(store=store, total="10.00")
+
+
+def _create_payment_method(name="cash"):
+    return models.PaymentMethod.objects.create(name=name)
+
+
+def _payload_for_endpoint(endpoint: str) -> dict:
+    if endpoint == "establishments":
+        return {
+            "name": "Central",
+            "municipality": "Springfield",
+            "neighborhood": "Downtown",
+            "street": "Main",
+            "number": "10",
+        }
+    if endpoint == "factories":
+        establishment = _create_establishment("Factory")
+        return {"establishment": establishment.id}
+    if endpoint == "stores":
+        establishment = _create_establishment("Store")
+        return {"establishment": establishment.id}
+    if endpoint == "deliveries":
+        establishment = _create_establishment("Delivery")
+        factory = _create_factory(establishment)
+        store = _create_store(establishment)
+        return {"factory": factory.id, "store": store.id}
+    if endpoint == "inventories":
+        store = _create_store()
+        product = _create_product()
+        return {"store": store.id, "product": product.id, "quantity": 5}
+    if endpoint == "sells":
+        store = _create_store()
+        return {"store": store.id, "total": "10.00"}
+    if endpoint == "payment-methods":
+        return {"name": "cash"}
+    if endpoint == "packages":
+        delivery = _create_delivery()
+        product = _create_product()
+        return {"delivery": delivery.id, "product": product.id, "quantity": 3}
+    if endpoint == "sell-details":
+        sell = _create_sell()
+        product = _create_product()
+        return {
+            "sell": sell.id,
+            "product": product.id,
+            "quantity": 1,
+            "price": "5.00",
+        }
+    if endpoint == "payments":
+        sell = _create_sell()
+        payment_method = _create_payment_method()
+        return {
+            "sell": sell.id,
+            "payment_method": payment_method.id,
+            "amount": "5.00",
+        }
+
+    raise ValueError(f"Unsupported endpoint: {endpoint}")
+
+
 class TestApiViews:
     @pytest.mark.django_db
     def test_health_check_allows_anonymous(self, api_client):
@@ -131,7 +249,6 @@ class TestApiViews:
     def test_product_update_requires_auth(self, api_client, product):
         response = api_client.patch(
             f"/api/products/{product.id}/",
-            {"description": "chips"},
         )
 
         assert response.status_code in {401, 403}
@@ -143,11 +260,29 @@ class TestApiViews:
         assert response.status_code in {401, 403}
 
     @pytest.mark.django_db
+    @pytest.mark.parametrize("endpoint,_model_class", CRUD_ENDPOINTS)
+    def test_crud_list_requires_auth(self, api_client, endpoint, _model_class):
+        response = api_client.get(f"/api/{endpoint}/")
+
+        assert response.status_code in {401, 403}
+
+    @pytest.mark.django_db
+    @pytest.mark.parametrize("endpoint,model_class", CRUD_ENDPOINTS)
+    def test_crud_create_minimal(self, auth_client, endpoint, model_class):
+        payload = _payload_for_endpoint(endpoint)
+
+        with patch("apps.api.views.publish_handler"):
+            response = auth_client.post(f"/api/{endpoint}/", payload)
+
+        assert response.status_code == 201
+        assert model_class.objects.filter(pk=response.data["id"]).exists()
+
+    @pytest.mark.django_db
     def test_product_create_update_delete_flow(self, auth_client):
         with patch("apps.api.views.publish_handler") as publish_mock:
             create_response = auth_client.post(
                 "/api/products/",
-                {"name": "cookie", "description": "choco", "price": "5.00"},
+                {"name": "cookie", "price": "5.00"},
             )
 
         assert create_response.status_code == 201
@@ -160,7 +295,6 @@ class TestApiViews:
         with patch("apps.api.views.publish_handler") as publish_mock:
             update_response = auth_client.patch(
                 f"/api/products/{product_id}/",
-                {"description": "chips"},
             )
 
         assert update_response.status_code == 200
@@ -178,8 +312,8 @@ class TestApiViews:
 
     @pytest.mark.django_db
     def test_product_update_duplicate_name(self, auth_client):
-        first = Product.objects.create(name="cookie", description="choco", price="5.00")
-        second = Product.objects.create(name="cake", description="vanilla", price="6.00")
+        first = Product.objects.create(name="cookie", price="5.00")
+        second = Product.objects.create(name="cake", price="6.00")
 
         response = auth_client.patch(
             f"/api/products/{second.id}/",
@@ -193,7 +327,7 @@ class TestApiViews:
     def test_product_validation_price_min(self, auth_client):
         response = auth_client.post(
             "/api/products/",
-            {"name": "cookie", "description": "choco", "price": "0.00"},
+            {"name": "cookie", "price": "0.00"},
         )
 
         assert response.status_code == 400
@@ -203,7 +337,7 @@ class TestApiViews:
     def test_product_validation_duplicate_active_name(self, auth_client, product):
         response = auth_client.post(
             "/api/products/",
-            {"name": product.name, "description": "choco", "price": "5.00"},
+            {"name": product.name, "price": "5.00"},
         )
 
         assert response.status_code == 400
@@ -217,25 +351,23 @@ class TestApiViews:
         )
 
         assert response.status_code == 400
-        assert "description" in response.data
         assert "price" in response.data
 
     @pytest.mark.django_db
     def test_product_validation_blank_fields(self, auth_client):
         response = auth_client.post(
             "/api/products/",
-            {"name": "", "description": "", "price": "5.00"},
+            {"name": "", "price": "5.00"},
         )
 
         assert response.status_code == 400
         assert "name" in response.data
-        assert "description" in response.data
 
     @pytest.mark.django_db
     def test_product_validation_invalid_price_format(self, auth_client):
         response = auth_client.post(
             "/api/products/",
-            {"name": "cookie", "description": "choco", "price": "abc"},
+            {"name": "cookie", "price": "abc"},
         )
 
         assert response.status_code == 400
@@ -245,7 +377,7 @@ class TestApiViews:
     def test_product_validation_price_decimal_places(self, auth_client):
         response = auth_client.post(
             "/api/products/",
-            {"name": "cookie", "description": "choco", "price": "5.123"},
+            {"name": "cookie", "price": "5.123"},
         )
 
         assert response.status_code == 400
@@ -255,7 +387,7 @@ class TestApiViews:
     def test_product_validation_name_max_length(self, auth_client):
         response = auth_client.post(
             "/api/products/",
-            {"name": "a" * 256, "description": "choco", "price": "5.00"},
+            {"name": "a" * 256, "price": "5.00"},
         )
 
         assert response.status_code == 400
@@ -363,7 +495,6 @@ class TestSerializers:
         serializer = ProductSerializer(
             data={
                 "name": "cookie",
-                "description": "choco",
                 "price": "5.00",
                 "version": 99,
             },
@@ -386,7 +517,7 @@ class TestSerializers:
     @pytest.mark.django_db
     def test_product_serializer_duplicate_active_name(self, product):
         serializer = ProductSerializer(
-            data={"name": product.name, "description": "dup", "price": "5.00"},
+            data={"name": product.name, "price": "5.00"},
         )
 
         assert serializer.is_valid() is False
@@ -397,23 +528,21 @@ class TestSerializers:
         serializer = ProductSerializer(data={"name": "cookie"})
 
         assert serializer.is_valid() is False
-        assert "description" in serializer.errors
         assert "price" in serializer.errors
 
     @pytest.mark.django_db
     def test_product_serializer_blank_fields(self):
         serializer = ProductSerializer(
-            data={"name": "", "description": "", "price": "5.00"},
+            data={"name": "", "price": "5.00"},
         )
 
         assert serializer.is_valid() is False
         assert "name" in serializer.errors
-        assert "description" in serializer.errors
 
     @pytest.mark.django_db
     def test_product_serializer_invalid_price_format(self):
         serializer = ProductSerializer(
-            data={"name": "cookie", "description": "choco", "price": "abc"},
+            data={"name": "cookie", "price": "abc"},
         )
 
         assert serializer.is_valid() is False
@@ -422,7 +551,7 @@ class TestSerializers:
     @pytest.mark.django_db
     def test_product_serializer_price_decimal_places(self):
         serializer = ProductSerializer(
-            data={"name": "cookie", "description": "choco", "price": "5.123"},
+            data={"name": "cookie", "price": "5.123"},
         )
 
         assert serializer.is_valid() is False
@@ -439,8 +568,8 @@ class TestModels:
 
     @pytest.mark.django_db
     def test_deleted_only_manager(self):
-        active = Product.objects.create(name="cookie", description="choco", price="5.00")
-        deleted = Product.objects.create(name="cake", description="vanilla", price="6.00")
+        active = Product.objects.create(name="cookie", price="5.00")
+        deleted = Product.objects.create(name="cake", price="6.00")
         deleted.delete()
 
         assert Product.objects.filter(pk=deleted.pk).exists() is False
@@ -455,7 +584,6 @@ class TestModels:
         product.delete()
         recreate = Product.objects.create(
             name="cookie",
-            description="vanilla",
             price="6.00",
         )
 
@@ -596,8 +724,8 @@ class TestAdmin:
 
     @pytest.mark.django_db
     def test_delete_queryset_hard_delete(self, admin_request, product_admin):
-        Product.objects.create(name="cookie", description="choco", price="5.00")
-        Product.objects.create(name="cake", description="vanilla", price="7.00")
+        Product.objects.create(name="cookie", price="5.00")
+        Product.objects.create(name="cake", price="7.00")
 
         with patch("apps.api.admin.publish_handler"):
             product_admin.delete_queryset(admin_request, Product.all_objects.all())
