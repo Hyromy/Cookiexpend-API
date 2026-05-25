@@ -47,22 +47,28 @@ class MixinViewSet(viewsets.ModelViewSet):
         publish_handler(self.model_name, "deleted", data, source)
 
 
-class EstablishmentViewSet(MixinViewSet):
-    model_name = "establishment"
-    queryset = models.Establishment.objects.all()
-    serializer_class = serializers.EstablishmentSerializer
-
-
 class FactoryViewSet(MixinViewSet):
     model_name = "factory"
     queryset = models.Factory.objects.all()
     serializer_class = serializers.FactorySerializer
+    permission_classes = [
+        any_of(
+            permission(user=["Store manager"], can=["see"]),
+            permission(user=["Factory manager"], can=["see", "create", "update", "delete"]),
+        )
+    ]
 
 
 class StoreViewSet(MixinViewSet):
     model_name = "store"
     queryset = models.Store.objects.all()
     serializer_class = serializers.StoreSerializer
+    permission_classes = [
+        any_of(
+            permission(user=["Store manager"], can=["see"]),
+            permission(user=["Factory manager"], can=["see", "create", "update", "delete"]),
+        )
+    ]
 
 
 class ProductViewSet(MixinViewSet):

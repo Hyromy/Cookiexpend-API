@@ -24,6 +24,29 @@ def _unique_name_validator(model_class, instance, value):
     return value
 
 
+class NestedMixin:
+    nested_field: str
+    nested_model: type[models.BaseModel]
+
+    def create_nested(self, validated_data):
+        nested_data = validated_data.pop(self.nested_field)
+        nested_instance = self.nested_model.objects.create(**nested_data)
+        return self.Meta.model.objects.create(
+            **validated_data,
+            **{self.nested_field: nested_instance},
+        )
+
+    def update_nested(self, instance, validated_data):
+        nested_data = validated_data.pop(self.nested_field, None)
+        if nested_data:
+            nested_instance = getattr(instance, self.nested_field)
+            for attr, value in nested_data.items():
+                setattr(nested_instance, attr, value)
+            nested_instance.save()
+
+        return super().update(instance, validated_data)
+
+
 class EstablishmentSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.Establishment
@@ -34,7 +57,12 @@ class EstablishmentSerializer(serializers.ModelSerializer):
         return _unique_name_validator(models.Establishment, self.instance, value)
 
 
-class FactorySerializer(serializers.ModelSerializer):
+class FactorySerializer(NestedMixin, serializers.ModelSerializer):
+    establishment = EstablishmentSerializer()
+
+    nested_field = "establishment"
+    nested_model = models.Establishment
+
     class Meta:
         model = models.Factory
         fields = _basic_fields("establishment")
@@ -45,8 +73,19 @@ class FactorySerializer(serializers.ModelSerializer):
         res["establishment"] = EstablishmentSerializer(instance.establishment).data
         return res
 
+    def create(self, validated_data):
+        return self.create_nested(validated_data)
 
-class StoreSerializer(serializers.ModelSerializer):
+    def update(self, instance, validated_data):
+        return self.update_nested(instance, validated_data)
+
+
+class StoreSerializer(NestedMixin, serializers.ModelSerializer):
+    establishment = EstablishmentSerializer()
+
+    nested_field = "establishment"
+    nested_model = models.Establishment
+
     class Meta:
         model = models.Store
         fields = _basic_fields("establishment")
@@ -56,6 +95,12 @@ class StoreSerializer(serializers.ModelSerializer):
         res = super().to_representation(instance)
         res["establishment"] = EstablishmentSerializer(instance.establishment).data
         return res
+
+    def create(self, validated_data):
+        return self.create_nested(validated_data)
+
+    def update(self, instance, validated_data):
+        return self.update_nested(instance, validated_data)
 
 
 class ProductSerializer(serializers.ModelSerializer):

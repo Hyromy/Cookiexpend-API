@@ -6,10 +6,9 @@ from . import views
 router = DefaultRouter()
 
 # Ensure that the endpoint is registered in plural form to follow REST conventions
-router.register(r"products", views.ProductViewSet)
-router.register(r"establishments", views.EstablishmentViewSet)
 router.register(r"factories", views.FactoryViewSet)
 router.register(r"stores", views.StoreViewSet)
+router.register(r"products", views.ProductViewSet)
 router.register(r"deliveries", views.DeliveryViewSet)
 router.register(r"inventories", views.InventoryViewSet)
 router.register(r"sells", views.SellViewSet)
