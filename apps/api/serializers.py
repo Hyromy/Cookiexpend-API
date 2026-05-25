@@ -1,3 +1,4 @@
+from django.db import transaction
 from rest_framework import serializers
 
 from . import models
@@ -113,16 +114,73 @@ class ProductSerializer(serializers.ModelSerializer):
         return _unique_name_validator(models.Product, self.instance, value)
 
 
+class PackageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = models.Package
+        fields = _basic_fields("delivery", "product", "quantity")
+        read_only_fields = _basic_fields()
+
+    def to_representation(self, instance):
+        res = super().to_representation(instance)
+        res["delivery"] = DeliverySerializer(instance.delivery).data
+        res["product"] = ProductSerializer(instance.product).data
+        return res
+
+
 class DeliverySerializer(serializers.ModelSerializer):
+    package = serializers.ListField(
+        child=serializers.DictField(),
+        write_only=True,
+        required=True,
+    )
+
     class Meta:
         model = models.Delivery
-        fields = _basic_fields("store", "factory")
+        fields = _basic_fields("store", "factory", "package")
         read_only_fields = _basic_fields()
+
+    def validate_package(self, value):
+        if not value:
+            raise serializers.ValidationError("At least one package is required.")
+
+        for item in value:
+            if "product" not in item or "quantity" not in item:
+                raise serializers.ValidationError("Each package must include product and quantity.")
+            if item["quantity"] is None or int(item["quantity"]) <= 0:
+                raise serializers.ValidationError("Package quantity must be greater than 0.")
+
+        return value
+
+    @transaction.atomic
+    def create(self, validated_data):
+        package_data = validated_data.pop("package")
+        delivery = models.Delivery.objects.create(**validated_data)
+        packages = []
+
+        for item in package_data:
+            product = models.Product.objects.get(pk=item["product"])
+            packages.append(
+                models.Package(
+                    delivery=delivery,
+                    product=product,
+                    quantity=item["quantity"],
+                )
+            )
+
+        models.Package.objects.bulk_create(packages)
+        return delivery
 
     def to_representation(self, instance):
         res = super().to_representation(instance)
         res["store"] = StoreSerializer(instance.store).data
         res["factory"] = FactorySerializer(instance.factory).data
+        res["package"] = [
+            {
+                "product": ProductSerializer(item.product).data,
+                "quantity": item.quantity,
+            }
+            for item in instance.package_set.all()
+        ]
         return res
 
 
@@ -159,19 +217,6 @@ class PaymentMethodSerializer(serializers.ModelSerializer):
 
     def validate_name(self, value: str) -> str:
         return _unique_name_validator(models.PaymentMethod, self.instance, value)
-
-
-class PackageSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = models.Package
-        fields = _basic_fields("delivery", "product", "quantity")
-        read_only_fields = _basic_fields()
-
-    def to_representation(self, instance):
-        res = super().to_representation(instance)
-        res["delivery"] = DeliverySerializer(instance.delivery).data
-        res["product"] = ProductSerializer(instance.product).data
-        return res
 
 
 class SellDetailSerializer(serializers.ModelSerializer):

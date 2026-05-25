@@ -126,15 +126,6 @@ class Delivery(BaseModel):
     factory = models.ForeignKey(Factory, on_delete=models.CASCADE)
     store = models.ForeignKey(Store, on_delete=models.CASCADE)
 
-    class Meta(BaseModel.Meta):
-        constraints = [
-            models.UniqueConstraint(
-                fields=["factory", "store"],
-                condition=Q(deleted_at__isnull=True),
-                name="unique_active_delivery_factory_store",
-            ),
-        ]
-
     def __str__(self):
         return f"{self.factory} to {self.store}"
 
