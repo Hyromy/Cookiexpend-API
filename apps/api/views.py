@@ -2,8 +2,10 @@ from json import dumps as json_dumps
 from logging import getLogger
 
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.models import User
 from django.http import StreamingHttpResponse
 from django.views.decorators.http import require_GET
+from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import viewsets
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
@@ -29,6 +31,8 @@ class MixinViewSet(viewsets.ModelViewSet):
     """Mixin viewset to handle common logic, publishing events to Redis on create, update, and delete operations."""
 
     model_name: MODEL
+
+    filter_backends = [DjangoFilterBackend]
 
     def perform_create(self, serializer):
         serializer.save()
@@ -87,12 +91,25 @@ class DeliveryViewSet(MixinViewSet):
     model_name = "delivery"
     queryset = models.Delivery.objects.all()
     serializer_class = serializers.DeliverySerializer
+    permission_classes = [
+        any_of(
+            permission(user=["Store manager"], can=["see"]),
+            permission(user=["Factory manager"], can=["see", "create", "update", "delete"]),
+        )
+    ]
 
 
 class InventoryViewSet(MixinViewSet):
     model_name = "inventory"
     queryset = models.Inventory.objects.all()
     serializer_class = serializers.InventorySerializer
+    permission_classes = [
+        any_of(
+            permission(user=["Store manager"], can=["see", "update"]),
+            permission(user=["Factory manager"], can=["see"]),
+        )
+    ]
+    filterset_fields = ["store"]
 
 
 class SellViewSet(MixinViewSet):
@@ -105,6 +122,9 @@ class PaymentMethodViewSet(MixinViewSet):
     model_name = "payment_method"
     queryset = models.PaymentMethod.objects.all()
     serializer_class = serializers.PaymentMethodSerializer
+    permission_classes = [
+        permission(user=["Store manager", "Factory manager"], can=["see"]),
+    ]
 
 
 class PackageViewSet(MixinViewSet):
@@ -123,6 +143,17 @@ class PaymentViewSet(MixinViewSet):
     model_name = "payment"
     queryset = models.Payment.objects.all()
     serializer_class = serializers.PaymentSerializer
+
+
+class UserViewSet(viewsets.ModelViewSet):
+    queryset = User.objects.all()
+    serializer_class = serializers.UserSerializer
+    permission_classes = [
+        any_of(
+            permission(user=["Store manager"], can=["see", "update"]),
+            permission(user=["Factory manager"], can=["see", "create", "update", "delete"]),
+        )
+    ]
 
 
 @require_GET
