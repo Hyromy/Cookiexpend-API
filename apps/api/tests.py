@@ -182,7 +182,11 @@ def _payload_for_endpoint(endpoint: str) -> dict:
         return {"store": store.id, "product": product.id, "quantity": 5}
     if endpoint == "sells":
         store = _create_store()
-        return {"store": store.id, "total": "10.00"}
+        product = _create_product()
+        return {
+            "store": store.id,
+            "products": [{"product": product.id, "quantity": 1}],
+        }
     if endpoint == "payment-methods":
         return {"name": "cash"}
     if endpoint == "packages":

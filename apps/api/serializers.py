@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django.contrib.auth.models import User
 from django.db import transaction
 from rest_framework import serializers
@@ -199,14 +201,107 @@ class InventorySerializer(serializers.ModelSerializer):
 
 
 class SellSerializer(serializers.ModelSerializer):
+    products = serializers.ListField(
+        child=serializers.DictField(),
+        write_only=True,
+        required=False,
+    )
+
     class Meta:
         model = models.Sell
-        fields = _basic_fields("store", "date", "total")
-        read_only_fields = _basic_fields()
+        fields = _basic_fields("store", "date", "total", "products")
+        read_only_fields = _basic_fields("total")
+
+    def validate_products(self, value):
+        if self.instance is not None:
+            return value
+
+        if not value:
+            raise serializers.ValidationError("At least one product is required.")
+
+        seen_products = set()
+        for item in value:
+            if "product" not in item or "quantity" not in item:
+                raise serializers.ValidationError("Each product must include product and quantity.")
+
+            try:
+                product_id = int(item["product"])
+            except (TypeError, ValueError) as e:
+                raise serializers.ValidationError("Product must be a valid id.") from e
+
+            item["product"] = product_id
+            if product_id in seen_products:
+                raise serializers.ValidationError("Each product can appear only once.")
+            seen_products.add(product_id)
+
+            try:
+                quantity = int(item["quantity"])
+            except (TypeError, ValueError) as e:
+                raise serializers.ValidationError("Product quantity must be a number.") from e
+
+            if quantity <= 0:
+                raise serializers.ValidationError("Product quantity must be greater than 0.")
+
+        return value
+
+    @transaction.atomic
+    def create(self, validated_data):
+        products_data = validated_data.pop("products", None)
+        if not products_data:
+            raise serializers.ValidationError({"products": "At least one product is required."})
+
+        product_ids = [item["product"] for item in products_data]
+        print("Product IDs:", product_ids)
+        products_by_id = models.Product.objects.in_bulk(product_ids)
+        missing = [
+            str(product_id) for product_id in product_ids if product_id not in products_by_id
+        ]
+        if missing:
+            raise serializers.ValidationError(
+                {"products": f"Products not found: {', '.join(missing)}"}
+            )
+
+        total = Decimal("0.00")
+        for item in products_data:
+            product = products_by_id[item["product"]]
+            quantity = int(item["quantity"])
+            total += product.price * quantity
+
+        sell = models.Sell.objects.create(total=total, **validated_data)
+        details = [
+            models.SellDetail(
+                sell=sell,
+                product=products_by_id[item["product"]],
+                quantity=int(item["quantity"]),
+                price=products_by_id[item["product"]].price,
+            )
+            for item in products_data
+        ]
+        models.SellDetail.objects.bulk_create(details)
+
+        payment_method = models.PaymentMethod.objects.filter(name="cash").first()
+        if payment_method is None:
+            raise serializers.ValidationError(
+                {"payment_method": "Default payment method 'cash' not found."}
+            )
+
+        models.Payment.objects.create(
+            sell=sell,
+            payment_method=payment_method,
+            amount=total,
+        )
+
+        return sell
 
     def to_representation(self, instance):
         res = super().to_representation(instance)
         res["store"] = StoreSerializer(instance.store).data
+        res["details"] = [
+            SellDetailNestedSerializer(item).data for item in instance.selldetail_set.all()
+        ]
+        res["payments"] = [
+            PaymentNestedSerializer(item).data for item in instance.payment_set.all()
+        ]
         return res
 
 
@@ -218,6 +313,30 @@ class PaymentMethodSerializer(serializers.ModelSerializer):
 
     def validate_name(self, value: str) -> str:
         return _unique_name_validator(models.PaymentMethod, self.instance, value)
+
+
+class SellDetailNestedSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = models.SellDetail
+        fields = _basic_fields("product", "quantity", "price")
+        read_only_fields = _basic_fields()
+
+    def to_representation(self, instance):
+        res = super().to_representation(instance)
+        res["product"] = ProductSerializer(instance.product).data
+        return res
+
+
+class PaymentNestedSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = models.Payment
+        fields = _basic_fields("payment_method", "amount")
+        read_only_fields = _basic_fields()
+
+    def to_representation(self, instance):
+        res = super().to_representation(instance)
+        res["payment_method"] = PaymentMethodSerializer(instance.payment_method).data
+        return res
 
 
 class SellDetailSerializer(serializers.ModelSerializer):
@@ -257,13 +376,13 @@ class UserSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         validated_data.pop("password")
         password = "0987654aA"
-        
+
         user = User(**validated_data)
         user.set_password(password)
         user.save()
-        
+
         return user
-    
+
     def update(self, instance, validated_data):
         password = validated_data.pop("password", None)
         for attr, value in validated_data.items():

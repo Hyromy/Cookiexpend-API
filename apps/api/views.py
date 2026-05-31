@@ -116,6 +116,12 @@ class SellViewSet(MixinViewSet):
     model_name = "sell"
     queryset = models.Sell.objects.all()
     serializer_class = serializers.SellSerializer
+    permission_classes = [
+        any_of(
+            permission(user=["Store manager"], can=["see", "create"]),
+            permission(user=["Factory manager"], can=["see", "update", "delete"]),
+        )
+    ]
 
 
 class PaymentMethodViewSet(MixinViewSet):
