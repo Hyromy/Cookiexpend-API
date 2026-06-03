@@ -29,10 +29,20 @@ def _unique_name_validator(model_class, instance, value):
 
 
 class NestedMixin:
+    """Mixin to create/update models with a nested object in DRF serializers.
+
+    Use it in serializers that accept a nested field (e.g. `establishment`) and
+    need to create or update that related model along with the main one.
+    Requirements: define `nested_field` and `nested_model`, and inherit from
+    `serializers.ModelSerializer` so `update()` exists.
+    """
+
     nested_field: str
     nested_model: type[models.BaseModel]
 
     def create_nested(self, validated_data):
+        """Create the nested model first, then the main model."""
+
         nested_data = validated_data.pop(self.nested_field)
         nested_instance = self.nested_model.objects.create(**nested_data)
         return self.Meta.model.objects.create(
@@ -41,6 +51,8 @@ class NestedMixin:
         )
 
     def update_nested(self, instance, validated_data):
+        """Update the nested model if provided and delegate the rest."""
+
         nested_data = validated_data.pop(self.nested_field, None)
         if nested_data:
             nested_instance = getattr(instance, self.nested_field)
@@ -134,7 +146,7 @@ class DeliverySerializer(serializers.ModelSerializer):
     package = serializers.ListField(
         child=serializers.DictField(),
         write_only=True,
-        required=True,
+        required=False,
     )
 
     class Meta:
@@ -172,6 +184,37 @@ class DeliverySerializer(serializers.ModelSerializer):
 
         models.Package.objects.bulk_create(packages)
         return delivery
+
+    @transaction.atomic
+    def update(self, instance, validated_data):
+        package_data = validated_data.pop("package", None)
+        instance = super().update(instance, validated_data)
+
+        if package_data is None:
+            return instance
+
+        product_ids = [item["product"] for item in package_data]
+        products_by_id = models.Product.objects.in_bulk(product_ids)
+        missing = [
+            str(product_id) for product_id in product_ids if product_id not in products_by_id
+        ]
+        if missing:
+            raise serializers.ValidationError(
+                {"package": f"Products not found: {', '.join(missing)}"}
+            )
+
+        models.Package.objects.filter(delivery=instance).delete()
+        packages = [
+            models.Package(
+                delivery=instance,
+                product=products_by_id[item["product"]],
+                quantity=item["quantity"],
+            )
+            for item in package_data
+        ]
+        models.Package.objects.bulk_create(packages)
+
+        return instance
 
     def to_representation(self, instance):
         res = super().to_representation(instance)
