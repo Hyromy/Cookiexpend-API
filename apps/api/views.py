@@ -1,5 +1,6 @@
 from json import dumps as json_dumps
 from logging import getLogger
+from typing import Literal
 
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
@@ -28,6 +29,38 @@ logger = getLogger(__name__)
 source = "api request"
 
 
+def status_change_handler(curren_status: str, step: Literal[1, -1]) -> str:
+    """Determine the next status based on the current status and the step. The step can be 1 for moving forward or -1 for moving backward in the status flow."""
+
+    try:
+        step = int(step)
+    except (ValueError, TypeError) as e:
+        raise ValueError("Step must be an integer (1 or -1)") from e
+
+    match curren_status:
+        case "pending":
+            if step == 1:
+                return "in_progress"
+            raise ValueError("Cannot move backward from pending status")
+
+        case "in_progress":
+            if step == 1:
+                return "completed"
+            if step == -1:
+                return "cancelled"
+
+        case "completed":
+            raise ValueError("Completed cannot change status")
+
+        case "cancelled":
+            if step == 1:
+                return "in_progress"
+            raise ValueError("Cannot move backward from cancelled status")
+
+        case _:
+            raise KeyError("Invalid status")
+
+
 class MixinViewSet(viewsets.ModelViewSet):
     """Mixin viewset to handle common logic, publishing events to Redis on create, update, and delete operations."""
 
@@ -36,10 +69,14 @@ class MixinViewSet(viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend]
 
     def perform_create(self, serializer):
+        """Override the default create behavior to publish an event after saving the new instance."""
+
         serializer.save()
         publish_handler(self.model_name, "created", serializer.data, source)
 
     def perform_update(self, serializer):
+        """Override the default update behavior to publish an event after saving the updated instance. Increment the version number on update."""
+
         instance = serializer.save()
         instance.version += 1
         instance.save()
@@ -47,6 +84,8 @@ class MixinViewSet(viewsets.ModelViewSet):
         publish_handler(self.model_name, "updated", serializer.data, source)
 
     def perform_destroy(self, instance):
+        """Override the default destroy behavior to publish an event before deleting the instance. Include the instance data in the event payload before deletion."""
+
         data = self.get_serializer(instance).data
         instance.delete()
         publish_handler(self.model_name, "deleted", data, source)
@@ -122,14 +161,20 @@ class DeliveryViewSet(MixinViewSet):
         if self.request.method == "GET":
             return Response(self.get_serializer(delivery).data, status=200)
 
-        new_status_id = request.data.get("status")
+        step = request.data.get("step")
+        if step is None:
+            return Response({"step": ["This field is required."]}, status=400)
 
-        if not new_status_id:
-            return Response({"status": ["This field is required."]}, status=400)
+        try:
+            step = int(step)
+        except (ValueError, TypeError):
+            return Response({"step": ["Must be an integer (1 or -1)."]}, status=400)
 
         try:
             with transaction.atomic():
-                new_status_obj = models.Status.objects.get(name=new_status_id)
+                new_status_obj = models.Status.objects.get(
+                    name=status_change_handler(delivery.status.name, step)
+                )
 
                 delivery.status = new_status_obj
                 delivery.version += 1
@@ -150,8 +195,8 @@ class DeliveryViewSet(MixinViewSet):
                             inventory_item.quantity += item.quantity
                             inventory_item.save()
 
-        except Exception:
-            return Response({"error": "Invalid status"}, status=400)
+        except Exception as e:
+            return Response({"error": str(e)}, status=400)
 
         publish_handler(self.model_name, "updated", self.get_serializer(delivery).data, source)
         return Response(self.get_serializer(delivery).data, status=200)
@@ -189,12 +234,6 @@ class PaymentMethodViewSet(MixinViewSet):
     permission_classes = [
         permission(user=["Store manager", "Factory manager"], can=["see"]),
     ]
-
-
-class PackageViewSet(MixinViewSet):
-    model_name = "package"
-    queryset = models.Package.objects.all()
-    serializer_class = serializers.PackageSerializer
 
 
 class SellDetailViewSet(MixinViewSet):
