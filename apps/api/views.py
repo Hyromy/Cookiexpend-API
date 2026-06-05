@@ -3,11 +3,12 @@ from logging import getLogger
 
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
+from django.db import transaction
 from django.http import StreamingHttpResponse
 from django.views.decorators.http import require_GET
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import viewsets
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
@@ -87,6 +88,15 @@ class ProductViewSet(MixinViewSet):
     ]
 
 
+class StatusViewSet(MixinViewSet):
+    model_name = "status"
+    queryset = models.Status.objects.all()
+    serializer_class = serializers.StatusSerializer
+    permission_classes = [
+        permission(user=["Store manager", "Factory manager"], can=["see"]),
+    ]
+
+
 class DeliveryViewSet(MixinViewSet):
     model_name = "delivery"
     queryset = models.Delivery.objects.all()
@@ -97,6 +107,54 @@ class DeliveryViewSet(MixinViewSet):
             permission(user=["Factory manager"], can=["see", "create", "update", "delete"]),
         )
     ]
+
+    @action(
+        detail=True,
+        methods=["get", "patch"],
+        url_path="status",
+        permission_classes=[
+            permission(user=["Store manager", "Factory manager"], can=["see", "update"]),
+        ],
+    )
+    def delivery_status(self, request, pk=None):
+        delivery = self.get_object()
+
+        if self.request.method == "GET":
+            return Response(self.get_serializer(delivery).data, status=200)
+
+        new_status_id = request.data.get("status")
+
+        if not new_status_id:
+            return Response({"status": ["This field is required."]}, status=400)
+
+        try:
+            with transaction.atomic():
+                new_status_obj = models.Status.objects.get(name=new_status_id)
+
+                delivery.status = new_status_obj
+                delivery.version += 1
+                delivery.save()
+
+                if new_status_obj.id == 3:
+                    packages = delivery.package_set.select_related("product").all()
+                    for item in packages:
+                        inventory_item, created = (
+                            models.Inventory.objects.select_for_update().get_or_create(
+                                store=delivery.store,
+                                product=item.product,
+                                defaults={"quantity": item.quantity},
+                            )
+                        )
+
+                        if not created:
+                            inventory_item.quantity += item.quantity
+                            inventory_item.save()
+
+        except Exception:
+            return Response({"error": "Invalid status"}, status=400)
+
+        publish_handler(self.model_name, "updated", self.get_serializer(delivery).data, source)
+        return Response(self.get_serializer(delivery).data, status=200)
 
 
 class InventoryViewSet(MixinViewSet):

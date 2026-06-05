@@ -142,6 +142,16 @@ class PackageSerializer(serializers.ModelSerializer):
         return res
 
 
+class StatusSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = models.Status
+        fields = _basic_fields("name", "description")
+        read_only_fields = _basic_fields()
+
+    def validate_name(self, value: str) -> str:
+        return _unique_name_validator(models.Status, self.instance, value)
+
+
 class DeliverySerializer(serializers.ModelSerializer):
     package = serializers.ListField(
         child=serializers.DictField(),
@@ -227,6 +237,7 @@ class DeliverySerializer(serializers.ModelSerializer):
             }
             for item in instance.package_set.all()
         ]
+        res["status"] = StatusSerializer(instance.status).data
         return res
 
 

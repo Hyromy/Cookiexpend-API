@@ -119,12 +119,30 @@ class Product(BaseModel):
         return f"{self.name} - ${self.price}"
 
 
+class Status(BaseModel):
+    name = models.CharField(max_length=32)
+    description = models.TextField(blank=True, default="", max_length=255)
+
+    class Meta(BaseModel.Meta):
+        constraints = [
+            models.UniqueConstraint(
+                fields=["name"],
+                condition=Q(deleted_at__isnull=True),
+                name="unique_active_status_name",
+            ),
+        ]
+
+    def __str__(self):
+        return self.name
+
+
 # third order
 
 
 class Delivery(BaseModel):
     factory = models.ForeignKey(Factory, on_delete=models.CASCADE)
     store = models.ForeignKey(Store, on_delete=models.CASCADE)
+    status = models.ForeignKey(Status, on_delete=models.PROTECT, default=1)
 
     def __str__(self):
         return f"{self.factory} to {self.store}"

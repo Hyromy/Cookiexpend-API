@@ -191,13 +191,22 @@ class ProductAdmin(Panel, admin.ModelAdmin):
     search_fields = ("name", "price")
 
 
+@admin.register(models.Status)
+class StatusAdmin(Panel, admin.ModelAdmin):
+    model_name = "status"
+    model_class = models.Status
+    serializer_class = serializers.StatusSerializer
+
+    search_fields = ("name", "description")
+
+
 @admin.register(models.Delivery)
 class DeliveryAdmin(Panel, admin.ModelAdmin):
     model_name = "delivery"
     model_class = models.Delivery
     serializer_class = serializers.DeliverySerializer
 
-    search_fields = ("store__establishment__name", "factory__establishment__name")
+    search_fields = ("store__establishment__name", "factory__establishment__name", "status__name")
 
 
 @admin.register(models.Inventory)
