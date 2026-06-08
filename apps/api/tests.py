@@ -153,7 +153,17 @@ def _create_sell(store=None):
 
 
 def _create_payment_method(name="cash"):
-    return models.PaymentMethod.objects.create(name=name)
+    payment_method, _ = models.PaymentMethod.objects.get_or_create(name=name)
+    return payment_method
+
+
+def _create_inventory(store=None, product=None, quantity=5):
+    if store is None:
+        store = _create_store()
+    if product is None:
+        product = _create_product()
+
+    return models.Inventory.objects.create(store=store, product=product, quantity=quantity)
 
 
 def _payload_for_endpoint(endpoint: str) -> dict:
@@ -183,6 +193,8 @@ def _payload_for_endpoint(endpoint: str) -> dict:
     if endpoint == "sells":
         store = _create_store()
         product = _create_product()
+        _create_inventory(store=store, product=product, quantity=5)
+        _create_payment_method("cash")
         return {
             "store": store.id,
             "products": [{"product": product.id, "quantity": 1}],
@@ -517,6 +529,64 @@ class TestSerializers:
         assert "created_at" in serializer.data
         assert "updated_at" in serializer.data
         assert "version" in serializer.data
+
+    @pytest.mark.django_db
+    def test_sell_creation_consumes_inventory(self, admin_user):
+        client = APIClient()
+        client.force_authenticate(user=admin_user)
+
+        store = _create_store()
+        product = _create_product()
+        _create_inventory(store=store, product=product, quantity=5)
+        _create_payment_method("cash")
+
+        with patch("apps.api.views.publish_handler"):
+            response = client.post(
+                "/api/sells/",
+                {
+                    "store": store.id,
+                    "products": [{"product": product.id, "quantity": 3}],
+                },
+                format="json",
+            )
+
+        assert response.status_code == 201
+        inventory = models.Inventory.objects.get(store=store, product=product)
+        assert inventory.quantity == 2
+        sell = models.Sell.objects.get(pk=response.data["id"])
+        assert sell.total == 15
+        assert models.SellDetail.objects.filter(sell=sell, product=product, quantity=3).exists()
+        assert models.Payment.objects.filter(sell=sell, amount="15.00").exists()
+
+    @pytest.mark.django_db
+    def test_sell_creation_rejects_insufficient_inventory(self, admin_user):
+        client = APIClient()
+        client.force_authenticate(user=admin_user)
+
+        store = _create_store()
+        product = _create_product()
+        _create_inventory(store=store, product=product, quantity=1)
+        _create_payment_method("cash")
+
+        response = client.post(
+            "/api/sells/",
+            {
+                "store": store.id,
+                "products": [{"product": product.id, "quantity": 2}],
+            },
+            format="json",
+        )
+
+        assert response.status_code == 400
+        errors = response.data["products"]
+        assert isinstance(errors, list)
+        assert errors, errors
+        first = errors[0]
+        assert first["product"]["name"] == product.name
+        assert int(str(first["available"])) == 1
+        assert int(str(first["requested"])) == 2
+        assert models.Sell.objects.count() == 0
+        assert models.Inventory.objects.get(store=store, product=product).quantity == 1
 
     @pytest.mark.django_db
     def test_product_serializer_duplicate_active_name(self, product):

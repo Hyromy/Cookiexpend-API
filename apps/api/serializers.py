@@ -298,23 +298,50 @@ class SellSerializer(serializers.ModelSerializer):
 
         return value
 
-    @transaction.atomic
-    def create(self, validated_data):
-        products_data = validated_data.pop("products", None)
-        if not products_data:
-            raise serializers.ValidationError({"products": "At least one product is required."})
-
+    def _extract_from_inventory(self, store, products_data, products_by_id):
         product_ids = [item["product"] for item in products_data]
-        print("Product IDs:", product_ids)
-        products_by_id = models.Product.objects.in_bulk(product_ids)
-        missing = [
-            str(product_id) for product_id in product_ids if product_id not in products_by_id
-        ]
-        if missing:
-            raise serializers.ValidationError(
-                {"products": f"Products not found: {', '.join(missing)}"}
-            )
+        inventory_by_product_id = {
+            inventory_item.product_id: inventory_item
+            for inventory_item in models.Inventory.objects.select_for_update()
+            .filter(store=store, product_id__in=product_ids)
+            .select_related("product")
+        }
 
+        insufficient_stock = []
+        for item in products_data:
+            product_id = item["product"]
+            requested_quantity = int(item["quantity"])
+            inventory_item = inventory_by_product_id.get(product_id)
+            product_obj = products_by_id[product_id]
+
+            if inventory_item is None:
+                insufficient_stock.append(
+                    {
+                        "product": {"id": product_obj.id, "name": product_obj.name},
+                        "available": 0,
+                        "requested": requested_quantity,
+                    }
+                )
+                continue
+
+            if inventory_item.quantity < requested_quantity:
+                insufficient_stock.append(
+                    {
+                        "product": {"id": product_obj.id, "name": product_obj.name},
+                        "available": inventory_item.quantity,
+                        "requested": requested_quantity,
+                    }
+                )
+
+        if insufficient_stock:
+            raise serializers.ValidationError({"products": insufficient_stock})
+
+        for item in products_data:
+            inventory_item = inventory_by_product_id[item["product"]]
+            inventory_item.quantity -= int(item["quantity"])
+            inventory_item.save(update_fields=["quantity"])
+
+    def _sell(self, validated_data, products_data, products_by_id):
         total = Decimal("0.00")
         for item in products_data:
             product = products_by_id[item["product"]]
@@ -346,6 +373,25 @@ class SellSerializer(serializers.ModelSerializer):
         )
 
         return sell
+
+    @transaction.atomic
+    def create(self, validated_data):
+        products_data = validated_data.pop("products", None)
+        if not products_data:
+            raise serializers.ValidationError({"products": "At least one product is required."})
+
+        product_ids = [item["product"] for item in products_data]
+        products_by_id = models.Product.objects.in_bulk(product_ids)
+        missing = [
+            str(product_id) for product_id in product_ids if product_id not in products_by_id
+        ]
+        if missing:
+            raise serializers.ValidationError(
+                {"products": f"Products not found: {', '.join(missing)}"}
+            )
+
+        self._extract_from_inventory(validated_data["store"], products_data, products_by_id)
+        return self._sell(validated_data, products_data, products_by_id)
 
     def to_representation(self, instance):
         res = super().to_representation(instance)
