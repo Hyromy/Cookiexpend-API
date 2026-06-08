@@ -189,6 +189,13 @@ python manage.py makemigrations    # Crea nuevas migraciones
 python manage.py migrate           # Aplica las migraciones
 ```
 
+Como referencia se incluye un diagrama relacional de la base de datos
+
+![](./img/relational-db-diagram.png)
+
+> [!Note]
+> Cada tabla incluye los campos de `created_at`, `updated_at`, `deleted_at` y `version`
+
 ### Gestión de la DB
 
 Puede resultar útil manipular la información en la base de datos, para interactuar con ella desde el proyecto es necesario crear un usuario administrador

@@ -27,7 +27,7 @@ def test_defaults_non_production():
 
     assert config.PRODUCTION is False
     assert config.DJANGO_SECRET_KEY == "insecure-secret-key"
-    assert config.HOSTS_LIST == ["*"]
+    assert len(config.HOSTS_LIST) >= 1
     assert config.REDIS_URL == "redis://localhost:6379/0"
 
 

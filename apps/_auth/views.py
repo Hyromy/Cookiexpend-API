@@ -9,6 +9,7 @@ from rest_framework.response import Response
 @permission_classes([IsAuthenticated])
 def me(request: HttpRequest) -> Response:
     user = request.user
+    group = user.groups.first()
     return Response(
         {
             "id": user.id,
@@ -21,6 +22,7 @@ def me(request: HttpRequest) -> Response:
             "is_active": user.is_active,
             "date_joined": user.date_joined,
             "first_name": user.first_name,
+            "role": group.name if group else None,
         }
     )
 
