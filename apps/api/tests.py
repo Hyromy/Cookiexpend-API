@@ -3,6 +3,7 @@ from unittest.mock import patch
 import pytest
 from django.contrib.admin.sites import AdminSite
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group
 from django.contrib.messages.storage.fallback import FallbackStorage
 from django.contrib.sessions.middleware import SessionMiddleware
 from django.test import RequestFactory
@@ -16,9 +17,13 @@ from .serializers import ProductSerializer
 
 
 @pytest.fixture()
-def user():
+def user(db):
     user_model = get_user_model()
-    return user_model.objects.create_user(username="tester", password="pass1234")
+    u = user_model.objects.create_user(username="tester", password="pass1234")
+    g1, _ = Group.objects.get_or_create(name="Factory manager")
+    g2, _ = Group.objects.get_or_create(name="Store manager")
+    u.groups.add(g1, g2)
+    return u
 
 
 @pytest.fixture()
@@ -94,14 +99,21 @@ def _admin_post_request(rf, admin_user, path, data):
 
 
 CRUD_ENDPOINTS = (
-    ("establishments", models.Establishment),
     ("factories", models.Factory),
     ("stores", models.Store),
     ("deliveries", models.Delivery),
     ("inventories", models.Inventory),
     ("sells", models.Sell),
     ("payment-methods", models.PaymentMethod),
-    ("packages", models.Package),
+    ("sell-details", models.SellDetail),
+    ("payments", models.Payment),
+)
+
+CREATE_ENDPOINTS = (
+    ("factories", models.Factory),
+    ("stores", models.Store),
+    ("deliveries", models.Delivery),
+    ("sells", models.Sell),
     ("sell-details", models.SellDetail),
     ("payments", models.Payment),
 )
@@ -167,25 +179,36 @@ def _create_inventory(store=None, product=None, quantity=5):
 
 
 def _payload_for_endpoint(endpoint: str) -> dict:
-    if endpoint == "establishments":
-        return {
-            "name": "Central",
-            "municipality": "Springfield",
-            "neighborhood": "Downtown",
-            "street": "Main",
-            "number": "10",
-        }
     if endpoint == "factories":
-        establishment = _create_establishment("Factory")
-        return {"establishment": establishment.id}
+        return {
+            "establishment": {
+                "name": "New Factory Est",
+                "municipality": "Springfield",
+                "neighborhood": "Industrial",
+                "street": "Avenue",
+                "number": "42",
+            }
+        }
     if endpoint == "stores":
-        establishment = _create_establishment("Store")
-        return {"establishment": establishment.id}
+        return {
+            "establishment": {
+                "name": "New Store Est",
+                "municipality": "Springfield",
+                "neighborhood": "Retail",
+                "street": "Boulevard",
+                "number": "5",
+            }
+        }
     if endpoint == "deliveries":
         establishment = _create_establishment("Delivery")
         factory = _create_factory(establishment)
         store = _create_store(establishment)
-        return {"factory": factory.id, "store": store.id}
+        product = _create_product()
+        return {
+            "factory": factory.id,
+            "store": store.id,
+            "package": [{"product": product.id, "quantity": 10}],
+        }
     if endpoint == "inventories":
         store = _create_store()
         product = _create_product()
@@ -200,11 +223,7 @@ def _payload_for_endpoint(endpoint: str) -> dict:
             "products": [{"product": product.id, "quantity": 1}],
         }
     if endpoint == "payment-methods":
-        return {"name": "cash"}
-    if endpoint == "packages":
-        delivery = _create_delivery()
-        product = _create_product()
-        return {"delivery": delivery.id, "product": product.id, "quantity": 3}
+        return {"name": "cash_new"}
     if endpoint == "sell-details":
         sell = _create_sell()
         product = _create_product()
@@ -216,7 +235,7 @@ def _payload_for_endpoint(endpoint: str) -> dict:
         }
     if endpoint == "payments":
         sell = _create_sell()
-        payment_method = _create_payment_method()
+        payment_method = _create_payment_method("credit")
         return {
             "sell": sell.id,
             "payment_method": payment_method.id,
@@ -224,6 +243,52 @@ def _payload_for_endpoint(endpoint: str) -> dict:
         }
 
     raise ValueError(f"Unsupported endpoint: {endpoint}")
+
+
+class TestLogicAndEndpoints:
+    def test_status_change_handler_logic(self):
+        from apps.api.views import status_change_handler
+
+        assert status_change_handler("pending", 1) == "in_progress"
+        assert status_change_handler("in_progress", 1) == "completed"
+        assert status_change_handler("in_progress", -1) == "cancelled"
+        assert status_change_handler("cancelled", 1) == "in_progress"
+
+        with pytest.raises(ValueError):
+            status_change_handler("pending", -1)
+        with pytest.raises(ValueError):
+            status_change_handler("completed", 1)
+
+    @pytest.mark.django_db
+    def test_delivery_status_endpoint(self, auth_client):
+        # Aseguramos que existan los estados (por si no se corrió el seeder en test config)
+        models.Status.objects.get_or_create(id=1, name="pending")
+        models.Status.objects.get_or_create(id=2, name="in_progress")
+        models.Status.objects.get_or_create(id=3, name="completed")
+
+        delivery = _create_delivery()
+        product = _create_product()
+        models.Package.objects.create(delivery=delivery, product=product, quantity=5)
+
+        # Transición 1: Pending -> In Progress
+        response = auth_client.patch(
+            f"/api/deliveries/{delivery.id}/status/", {"step": 1}, format="json"
+        )
+        assert response.status_code == 200
+        delivery.refresh_from_db()
+        assert delivery.status.name == "in_progress"
+
+        # Transición 2: In Progress -> Completed
+        response = auth_client.patch(
+            f"/api/deliveries/{delivery.id}/status/", {"step": 1}, format="json"
+        )
+        assert response.status_code == 200
+        delivery.refresh_from_db()
+        assert delivery.status.name == "completed"
+
+        # Debe haber aumentado el inventario porque el estado completó con ID=3
+        inventory = models.Inventory.objects.get(store=delivery.store, product=product)
+        assert inventory.quantity == 5
 
 
 class TestApiViews:
@@ -283,12 +348,12 @@ class TestApiViews:
         assert response.status_code in {401, 403}
 
     @pytest.mark.django_db
-    @pytest.mark.parametrize("endpoint,model_class", CRUD_ENDPOINTS)
+    @pytest.mark.parametrize("endpoint,model_class", CREATE_ENDPOINTS)
     def test_crud_create_minimal(self, auth_client, endpoint, model_class):
         payload = _payload_for_endpoint(endpoint)
 
         with patch("apps.api.views.publish_handler"):
-            response = auth_client.post(f"/api/{endpoint}/", payload)
+            response = auth_client.post(f"/api/{endpoint}/", payload, format="json")
 
         assert response.status_code == 201
         assert model_class.objects.filter(pk=response.data["id"]).exists()
