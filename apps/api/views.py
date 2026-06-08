@@ -1,7 +1,9 @@
 from json import dumps as json_dumps
 from logging import getLogger
 
+from django.contrib.auth.decorators import login_required
 from django.http import StreamingHttpResponse
+from django.views.decorators.http import require_GET
 from rest_framework import viewsets
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
@@ -38,6 +40,8 @@ class ProductViewSet(viewsets.ModelViewSet):
         publish_handler("product", "deleted", serializers.ProductSerializer(instance).data, source)
 
 
+@require_GET
+@login_required
 def events(request):
     """Endpoint for streaming guild update events. Clients can connect to this endpoint to receive real-time updates."""
 

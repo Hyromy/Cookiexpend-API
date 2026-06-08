@@ -45,17 +45,26 @@ def publish_on_redis(channel: str, payload: dict):
         logger.error("Failed to publish on Redis", exc_info=e)
 
 
-def redis_payload(data: dict, /, *, event: str, version: int, updated_at: str, source: str) -> dict:
+def redis_payload(
+    data: dict,
+    /,
+    *,
+    event: str,
+    version: int,
+    updated_at: str,
+    source: str,
+    model: MODEL,
+    action: EVENT,
+) -> dict:
     """Helper function to create a standardized payload for Redis messages. This ensures that all messages have a consistent structure."""
-
-    data.pop("version")
-    data.pop("updated_at")
 
     return {
         "event": event,
         "version": version,
         "updated_at": updated_at,
         "source": source,
+        "model": model,
+        "action": action,
         "data": data,
     }
 
@@ -72,5 +81,7 @@ def publish_handler(model: MODEL, action: EVENT, data: dict, source: str = "unkn
             version=data.get("version"),
             updated_at=data.get("updated_at"),
             source=source,
+            model=model,
+            action=action,
         ),
     )
