@@ -103,6 +103,7 @@ class Store(BaseModel):
 
 
 class Product(BaseModel):
+    sku = models.BigIntegerField(unique=True)
     name = models.CharField(max_length=255)
     price = money()
 

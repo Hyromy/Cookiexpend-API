@@ -188,7 +188,7 @@ class ProductAdmin(Panel, admin.ModelAdmin):
     model_class = models.Product
     serializer_class = serializers.ProductSerializer
 
-    search_fields = ("name", "price")
+    search_fields = ("sku", "name", "price")
 
 
 @admin.register(models.Status)

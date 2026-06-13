@@ -122,7 +122,7 @@ class StoreSerializer(NestedMixin, serializers.ModelSerializer):
 class ProductSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.Product
-        fields = _basic_fields("name", "price")
+        fields = _basic_fields("sku", "name", "price")
         read_only_fields = _basic_fields()
 
     def validate_name(self, value: str) -> str:
