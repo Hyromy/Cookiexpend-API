@@ -5,6 +5,8 @@ from django.db import models
 from django.db.models import Q
 from django.utils import timezone
 
+from project.utils import ImgHelper
+
 
 def money():
     return models.DecimalField(
@@ -106,6 +108,7 @@ class Product(BaseModel):
     sku = models.BigIntegerField(unique=True)
     name = models.CharField(max_length=255)
     price = money()
+    img = models.ImageField(upload_to=ImgHelper.generate_path_in("products"), blank=True, null=True)
 
     class Meta(BaseModel.Meta):
         constraints = [
@@ -118,6 +121,16 @@ class Product(BaseModel):
 
     def __str__(self):
         return f"{self.name} - ${self.price}"
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        ImgHelper.save(
+            model=self,
+            methods=[
+                ImgHelper.Method.crop_to_square,
+                lambda img: ImgHelper.Method.scale(img, size=(1024, 1024)),
+            ],
+        )
 
 
 class Status(BaseModel):

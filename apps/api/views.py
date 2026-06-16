@@ -71,8 +71,10 @@ class MixinViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         """Override the default create behavior to publish an event after saving the new instance."""
 
-        serializer.save()
-        publish_handler(self.model_name, "created", serializer.data, source)
+        instance = serializer.save()
+        instance.refresh_from_db()
+
+        publish_handler(self.model_name, "created", self.get_serializer(instance).data, source)
 
     def perform_update(self, serializer):
         """Override the default update behavior to publish an event after saving the updated instance. Increment the version number on update."""
@@ -81,13 +83,16 @@ class MixinViewSet(viewsets.ModelViewSet):
         instance.version += 1
         instance.save()
 
-        publish_handler(self.model_name, "updated", serializer.data, source)
+        instance.refresh_from_db()
+
+        publish_handler(self.model_name, "updated", self.get_serializer(instance).data, source)
 
     def perform_destroy(self, instance):
         """Override the default destroy behavior to publish an event before deleting the instance. Include the instance data in the event payload before deletion."""
 
         data = self.get_serializer(instance).data
         instance.delete()
+
         publish_handler(self.model_name, "deleted", data, source)
 
 
