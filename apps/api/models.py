@@ -1,5 +1,6 @@
 from decimal import Decimal
 
+from django.contrib.auth.models import User
 from django.core.validators import MinValueValidator
 from django.db import models
 from django.db.models import Q
@@ -55,7 +56,7 @@ class BaseModel(models.Model):
         return super().delete(using=using, keep_parents=keep_parents)
 
 
-# first order
+# zero order
 
 
 class Establishment(BaseModel):
@@ -67,6 +68,18 @@ class Establishment(BaseModel):
 
     def __str__(self):
         return f"{self.name} - {self.municipality}, {self.street}"
+
+
+# first order
+
+
+class Profile(BaseModel):
+    user = models.OneToOneField(User, on_delete=models.CASCADE)
+    establishment = models.ForeignKey(Establishment, on_delete=models.PROTECT)
+    role = models.CharField(max_length=20, choices=[("factory", "Factory"), ("store", "Store")])
+
+    def __str__(self):
+        return f"{self.user.username} - {self.role} - {self.establishment.name}"
 
 
 # second order

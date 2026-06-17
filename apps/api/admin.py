@@ -155,6 +155,15 @@ class Panel:
         return super().changeform_view(request, object_id, form_url, extra_context)
 
 
+@admin.register(models.Profile)
+class ProfileAdmin(admin.ModelAdmin):
+    model_name = "profile"
+    model_class = models.Profile
+    serializer_class = serializers.ProfileSerializer
+
+    search_fields = ("user__username", "user__email", "establishment__name")
+
+
 @admin.register(models.Establishment)
 class EstablishmentAdmin(Panel, admin.ModelAdmin):
     model_name = "establishment"

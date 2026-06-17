@@ -63,6 +63,18 @@ class NestedMixin:
         return super().update(instance, validated_data)
 
 
+class ProfileSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = models.Profile
+        fields = _basic_fields("establishment")
+        read_only_fields = _basic_fields()
+
+    def to_representation(self, instance):
+        res = super().to_representation(instance)
+        res["establishment"] = EstablishmentSerializer(instance.establishment).data
+        return res
+
+
 class EstablishmentSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.Establishment
@@ -264,7 +276,7 @@ class SellSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.Sell
         fields = _basic_fields("store", "date", "total", "products")
-        read_only_fields = _basic_fields("total")
+        read_only_fields = _basic_fields("store", "total")
 
     def validate_products(self, value):
         if self.instance is not None:
@@ -376,6 +388,14 @@ class SellSerializer(serializers.ModelSerializer):
 
     @transaction.atomic
     def create(self, validated_data):
+        request = self.context.get("request")
+        if not request or not request.user or not hasattr(request.user, "profile"):
+            raise serializers.ValidationError(
+                {"store": "Authenticated user with a store profile is required."}
+            )
+
+        validated_data["store"] = request.user.profile.establishment
+
         products_data = validated_data.pop("products", None)
         if not products_data:
             raise serializers.ValidationError({"products": "At least one product is required."})

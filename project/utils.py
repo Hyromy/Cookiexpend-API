@@ -4,6 +4,7 @@ from typing import Callable, Literal, Tuple
 
 from django.db.models import Model
 from django.utils import timezone
+from django.utils.deconstruct import deconstructible
 from PIL import Image
 
 
@@ -75,14 +76,7 @@ class ImgHelper:
     def generate_path_in(folder_name: FOLDER) -> Callable:
         """Generate a unique path for an uploaded image, using the current date and a random token."""
 
-        def wrapper(instance, filename) -> str:
-            ext = os.path.splitext(filename)[1]
-            current_date = timezone.now().strftime("%Y%m%d")
-            token = uuid.uuid4().hex[:8]
-
-            return os.path.join(folder_name, f"{current_date}_{token}{ext}")
-
-        return wrapper
+        return PathGenerator(folder_name)
 
     @staticmethod
     def save(
@@ -121,3 +115,15 @@ class ImgHelper:
 
             relative_new_name = os.path.splitext(file_field.name)[0] + ".webp"
             model.__class__.objects.filter(id=model.id).update(**{field_name: relative_new_name})
+
+
+@deconstructible
+class PathGenerator:
+    def __init__(self, folder_name: str):
+        self.folder_name = folder_name
+
+    def __call__(self, instance, filename) -> str:
+        ext = os.path.splitext(filename)[1]
+        current_date = timezone.now().strftime("%Y%m%d")
+        token = uuid.uuid4().hex[:8]
+        return os.path.join(self.folder_name, f"{current_date}_{token}{ext}")

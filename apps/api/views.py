@@ -222,14 +222,37 @@ class InventoryViewSet(MixinViewSet):
 
 class SellViewSet(MixinViewSet):
     model_name = "sell"
-    queryset = models.Sell.objects.all()
     serializer_class = serializers.SellSerializer
     permission_classes = [
         any_of(
-            permission(user=["Store manager"], can=["see", "create"]),
+            permission(user=["Store manager"], can=["see_self", "create"]),
             permission(user=["Factory manager"], can=["see", "update", "delete"]),
         )
     ]
+
+    def get_queryset(self):
+        user = self.request.user
+
+        if not user or user.is_anonymous:
+            return models.Sell.objects.none()
+
+        queryset = models.Sell.objects.select_related("store__establishment")
+
+        if (
+            user.is_superuser
+            or user.is_staff
+            or user.groups.filter(name="Factory manager").exists()
+        ):
+            return queryset.all()
+
+        if user.groups.filter(name="Store manager").exists():
+            if hasattr(user, "profile") and user.profile.establishment:
+                user_establishment_id = user.profile.establishment.id
+                return queryset.filter(store__establishment_id=user_establishment_id)
+
+            return models.Sell.objects.none()
+
+        return models.Sell.objects.none()
 
 
 class PaymentMethodViewSet(MixinViewSet):

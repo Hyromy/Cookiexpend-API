@@ -10,6 +10,16 @@ from rest_framework.response import Response
 def me(request: HttpRequest) -> Response:
     user = request.user
     group = user.groups.first()
+
+    profile = getattr(user, "profile", None)
+    establishment_data = None
+
+    if profile and profile.establishment:
+        establishment_data = {
+            "id": profile.establishment.id,
+            "name": profile.establishment.name,
+        }
+
     return Response(
         {
             "id": user.id,
@@ -23,6 +33,7 @@ def me(request: HttpRequest) -> Response:
             "date_joined": user.date_joined,
             "first_name": user.first_name,
             "role": group.name if group else None,
+            "establishment": establishment_data,
         }
     )
 
@@ -30,8 +41,6 @@ def me(request: HttpRequest) -> Response:
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def auth_logout(request: HttpRequest) -> Response:
-    print("Logging out user:", request.user.username)
-
     was_authenticated = request.user.is_authenticated
     logout(request)
     return Response({"success": True, "was_authenticated": was_authenticated}, status=200)
