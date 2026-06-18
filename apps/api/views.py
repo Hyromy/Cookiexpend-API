@@ -1,10 +1,11 @@
 from json import dumps as json_dumps
 from logging import getLogger
-from typing import Literal
+from typing import Any, Literal
 
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
 from django.db import transaction
+from django.db.models import Model, QuerySet
 from django.http import StreamingHttpResponse
 from django.views.decorators.http import require_GET
 from django_filters.rest_framework import DjangoFilterBackend
@@ -94,6 +95,43 @@ class MixinViewSet(viewsets.ModelViewSet):
         instance.delete()
 
         publish_handler(self.model_name, "deleted", data, source)
+
+    def get_self_queryset(
+        self,
+        *,
+        model: Model,
+        queryset_select_related_fields: list[str],
+        filter_group_to_all: dict[str, Any],
+        filter_group_to_self: dict[str, Any],
+        filter_query: str,
+    ) -> QuerySet:
+        """
+        Helper method to return a queryset filtered based on the user's permissions. If the user belongs
+        to the group specified in filter_group_to_all, they can see all records. If they belong to the
+        group specified in filter_group_to_self, they can only see records related to their establishment.
+        Otherwise, they cannot see any records.
+        """
+
+        user = self.request.user
+
+        if not user or user.is_anonymous:
+            return model.objects.none()
+
+        queryset = model.objects.select_related(*queryset_select_related_fields)
+
+        if user.is_superuser or user.is_staff or user.groups.filter(**filter_group_to_all).exists():
+            return queryset.all()
+
+        if user.groups.filter(**filter_group_to_self).exists():
+            if hasattr(user, "profile") and user.profile.establishment:
+                user_establishment_id = user.profile.establishment.id
+                return queryset.filter(
+                    **{f"{filter_query}__establishment_id": user_establishment_id}
+                )
+
+            return model.objects.none()
+
+        return model.objects.none()
 
 
 class FactoryViewSet(MixinViewSet):
@@ -209,7 +247,6 @@ class DeliveryViewSet(MixinViewSet):
 
 class InventoryViewSet(MixinViewSet):
     model_name = "inventory"
-    queryset = models.Inventory.objects.all()
     serializer_class = serializers.InventorySerializer
     permission_classes = [
         any_of(
@@ -218,6 +255,15 @@ class InventoryViewSet(MixinViewSet):
         )
     ]
     filterset_fields = ["store"]
+
+    def get_queryset(self):
+        return self.get_self_queryset(
+            model=models.Inventory,
+            queryset_select_related_fields=["store__establishment"],
+            filter_group_to_all={"name": "Factory manager"},
+            filter_group_to_self={"name": "Store manager"},
+            filter_query="store",
+        )
 
 
 class SellViewSet(MixinViewSet):
@@ -231,28 +277,13 @@ class SellViewSet(MixinViewSet):
     ]
 
     def get_queryset(self):
-        user = self.request.user
-
-        if not user or user.is_anonymous:
-            return models.Sell.objects.none()
-
-        queryset = models.Sell.objects.select_related("store__establishment")
-
-        if (
-            user.is_superuser
-            or user.is_staff
-            or user.groups.filter(name="Factory manager").exists()
-        ):
-            return queryset.all()
-
-        if user.groups.filter(name="Store manager").exists():
-            if hasattr(user, "profile") and user.profile.establishment:
-                user_establishment_id = user.profile.establishment.id
-                return queryset.filter(store__establishment_id=user_establishment_id)
-
-            return models.Sell.objects.none()
-
-        return models.Sell.objects.none()
+        return self.get_self_queryset(
+            model=models.Sell,
+            queryset_select_related_fields=["store__establishment"],
+            filter_group_to_all={"name": "Factory manager"},
+            filter_group_to_self={"name": "Store manager"},
+            filter_query="store",
+        )
 
 
 class PaymentMethodViewSet(MixinViewSet):
@@ -281,7 +312,7 @@ class UserViewSet(viewsets.ModelViewSet):
     serializer_class = serializers.UserSerializer
     permission_classes = [
         any_of(
-            permission(user=["Store manager"], can=["see", "update"]),
+            permission(user=["Store manager"], can=["see_self", "update_self"]),
             permission(user=["Factory manager"], can=["see", "create", "update", "delete"]),
         )
     ]
