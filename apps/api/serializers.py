@@ -1,6 +1,6 @@
 from decimal import Decimal
 
-from django.contrib.auth.models import User
+from django.contrib.auth.models import Group, User
 from django.db import transaction
 from rest_framework import serializers
 
@@ -63,15 +63,55 @@ class NestedMixin:
         return super().update(instance, validated_data)
 
 
+class UserSerializer(serializers.ModelSerializer):
+    password = serializers.CharField(write_only=True, required=False)
+
+    class Meta:
+        model = User
+        fields = ["id", "username", "email", "password", "first_name", "last_name"]
+        read_only_fields = ["id"]
+
+
 class ProfileSerializer(serializers.ModelSerializer):
+    username = serializers.CharField(write_only=True, required=False)
+    email = serializers.EmailField(write_only=True, required=False, allow_blank=True)
+
     class Meta:
         model = models.Profile
-        fields = _basic_fields("establishment")
-        read_only_fields = _basic_fields()
+        fields = _basic_fields("user", "establishment", "role", "username", "email")
+        read_only_fields = _basic_fields("user")
+
+    def _find_establishment_relationship(self, data, key, serializer_class, instance):
+        try:
+            related_instance = getattr(instance.establishment, key)
+            data[key] = serializer_class(related_instance).data
+        except (models.Store.DoesNotExist, models.Factory.DoesNotExist):
+            data[key] = None
+
+    @transaction.atomic
+    def create(self, validated_data):
+        username = validated_data.pop("username")
+        email = validated_data.pop("email")
+        role = validated_data.get("role")
+
+        if not username:
+            raise serializers.ValidationError({"username": "Username is required."})
+
+        new_user = User.objects.create(username=username, email=email)
+        password = "0987654aA"  # TODO: generate random password and sent to email user
+        new_user.set_password(password)
+        new_user.groups.add(Group.objects.get(name=role.capitalize() + " manager"))
+        new_user.save()
+
+        return models.Profile.objects.create(user=new_user, **validated_data)
 
     def to_representation(self, instance):
         res = super().to_representation(instance)
-        res["establishment"] = EstablishmentSerializer(instance.establishment).data
+
+        res["user"] = UserSerializer(instance.user).data
+        self._find_establishment_relationship(res, "store", StoreSerializer, instance)
+        self._find_establishment_relationship(res, "factory", FactorySerializer, instance)
+
         return res
 
 
@@ -83,6 +123,17 @@ class EstablishmentSerializer(serializers.ModelSerializer):
 
     def validate_name(self, value: str) -> str:
         return _unique_name_validator(models.Establishment, self.instance, value)
+
+    def to_representation(self, instance):
+        res = super().to_representation(instance)
+        if hasattr(instance, "factory"):
+            res["type"] = "factory"
+        elif hasattr(instance, "store"):
+            res["type"] = "store"
+        else:
+            res["type"] = None
+
+        return res
 
 
 class FactorySerializer(NestedMixin, serializers.ModelSerializer):
@@ -483,33 +534,3 @@ class PaymentSerializer(serializers.ModelSerializer):
         res["sell"] = SellSerializer(instance.sell).data
         res["payment_method"] = PaymentMethodSerializer(instance.payment_method).data
         return res
-
-
-class UserSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(write_only=True, required=False)
-
-    class Meta:
-        model = User
-        fields = ["id", "username", "email", "password", "first_name", "last_name"]
-        read_only_fields = ["id"]
-
-    def create(self, validated_data):
-        validated_data.pop("password")
-        password = "0987654aA"
-
-        user = User(**validated_data)
-        user.set_password(password)
-        user.save()
-
-        return user
-
-    def update(self, instance, validated_data):
-        password = validated_data.pop("password", None)
-        for attr, value in validated_data.items():
-            setattr(instance, attr, value)
-
-        if password:
-            instance.set_password(password)
-
-        instance.save()
-        return instance

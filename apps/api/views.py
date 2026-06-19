@@ -3,7 +3,6 @@ from logging import getLogger
 from typing import Any, Literal
 
 from django.contrib.auth.decorators import login_required
-from django.contrib.auth.models import User
 from django.db import transaction
 from django.db.models import Model, QuerySet
 from django.http import StreamingHttpResponse
@@ -132,6 +131,15 @@ class MixinViewSet(viewsets.ModelViewSet):
             return model.objects.none()
 
         return model.objects.none()
+
+
+class EstablishmentViewSet(MixinViewSet):
+    model_name = "establishment"
+    queryset = models.Establishment.objects.all()
+    serializer_class = serializers.EstablishmentSerializer
+    permission_classes = [
+        permission(user=["Factory manager"], can=["see"]),
+    ]
 
 
 class FactoryViewSet(MixinViewSet):
@@ -307,9 +315,10 @@ class PaymentViewSet(MixinViewSet):
     serializer_class = serializers.PaymentSerializer
 
 
-class UserViewSet(viewsets.ModelViewSet):
-    queryset = User.objects.all()
-    serializer_class = serializers.UserSerializer
+class ProfileViewSet(MixinViewSet):
+    model_name = "profile"
+    queryset = models.Profile.objects.all()
+    serializer_class = serializers.ProfileSerializer
     permission_classes = [
         any_of(
             permission(user=["Store manager"], can=["see_self", "update_self"]),
