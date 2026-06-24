@@ -99,3 +99,6 @@ docs/
 Dockerfile
 docker-compose.yml
 .dockerignore
+
+# media files
+media/

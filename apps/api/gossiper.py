@@ -18,6 +18,7 @@ MODEL = Literal[
     "package",
     "sell_detail",
     "payment",
+    "profile",
 ]
 MODEL_VALUES = MODEL.__args__
 
