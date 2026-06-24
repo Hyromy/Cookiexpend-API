@@ -445,7 +445,7 @@ class SellSerializer(serializers.ModelSerializer):
                 {"store": "Authenticated user with a store profile is required."}
             )
 
-        validated_data["store"] = request.user.profile.establishment
+        validated_data["store"] = request.user.profile.establishment.store
 
         products_data = validated_data.pop("products", None)
         if not products_data:
