@@ -12,8 +12,8 @@ RUN pip install --no-cache-dir --upgrade pip \
 
 COPY --chown=appuser:appuser pyproject.toml poetry.lock* ./
 
-RUN mkdir -p /home/app/staticfiles \
-    && chown -R appuser:appuser /home/app/staticfiles
+RUN mkdir -p /home/app/staticfiles /home/app/media \
+    && chown -R appuser:appuser /home/app/staticfiles /home/app/media
 
 RUN poetry config virtualenvs.create false \
     && poetry install --no-interaction --no-ansi --only main --no-root

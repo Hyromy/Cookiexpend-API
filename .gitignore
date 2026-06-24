@@ -86,3 +86,6 @@ Desktop.ini
 
 # ruff
 .ruff_cache/
+
+# media files
+media/

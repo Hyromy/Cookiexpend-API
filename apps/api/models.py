@@ -1,9 +1,12 @@
 from decimal import Decimal
 
+from django.contrib.auth.models import User
 from django.core.validators import MinValueValidator
 from django.db import models
 from django.db.models import Q
 from django.utils import timezone
+
+from project.utils import ImgHelper
 
 
 def money():
@@ -53,7 +56,7 @@ class BaseModel(models.Model):
         return super().delete(using=using, keep_parents=keep_parents)
 
 
-# first order
+# zero order
 
 
 class Establishment(BaseModel):
@@ -65,6 +68,18 @@ class Establishment(BaseModel):
 
     def __str__(self):
         return f"{self.name} - {self.municipality}, {self.street}"
+
+
+# first order
+
+
+class Profile(BaseModel):
+    user = models.OneToOneField(User, on_delete=models.CASCADE)
+    establishment = models.ForeignKey(Establishment, on_delete=models.PROTECT)
+    role = models.CharField(max_length=20, choices=[("factory", "Factory"), ("store", "Store")])
+
+    def __str__(self):
+        return f"{self.user.username} - {self.role} - {self.establishment.name}"
 
 
 # second order
@@ -103,8 +118,10 @@ class Store(BaseModel):
 
 
 class Product(BaseModel):
+    sku = models.BigIntegerField(unique=True)
     name = models.CharField(max_length=255)
     price = money()
+    img = models.ImageField(upload_to=ImgHelper.generate_path_in("products"), blank=True, null=True)
 
     class Meta(BaseModel.Meta):
         constraints = [
@@ -117,6 +134,16 @@ class Product(BaseModel):
 
     def __str__(self):
         return f"{self.name} - ${self.price}"
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        ImgHelper.save(
+            model=self,
+            methods=[
+                ImgHelper.Method.crop_to_square,
+                lambda img: ImgHelper.Method.scale(img, size=(1024, 1024)),
+            ],
+        )
 
 
 class Status(BaseModel):

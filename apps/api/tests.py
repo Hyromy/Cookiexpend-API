@@ -1,3 +1,4 @@
+import random
 from unittest.mock import patch
 
 import pytest
@@ -51,7 +52,7 @@ def jwt_client(user):
 
 @pytest.fixture()
 def product(db):
-    return Product.objects.create(name="cookie", price="5.00")
+    return Product.objects.create(name="cookie", price="5.00", sku=122)
 
 
 @pytest.fixture()
@@ -129,8 +130,16 @@ def _create_establishment(name="Cookiexpend"):
     )
 
 
-def _create_product(name="cookie"):
-    return models.Product.objects.create(name=name, price="5.00")
+def _create_store(establishment=None):
+    if establishment is None:
+        establishment = _create_establishment("Store")
+    return models.Store.objects.create(establishment=establishment)
+
+
+def _create_product(name="cookie", sku=None):
+    if sku is None:
+        sku = random.randint(1, 999999)
+    return models.Product.objects.create(name=name, price="5.00", sku=sku)
 
 
 def _create_factory(establishment=None):
@@ -215,6 +224,14 @@ def _payload_for_endpoint(endpoint: str) -> dict:
         return {"store": store.id, "product": product.id, "quantity": 5}
     if endpoint == "sells":
         store = _create_store()
+        User = get_user_model()
+        tester_user = User.objects.get(username="tester")
+
+        models.Profile.objects.filter(user=tester_user).delete()
+        models.Profile.objects.create(
+            user=tester_user, establishment=store.establishment, role="store"
+        )
+
         product = _create_product()
         _create_inventory(store=store, product=product, quantity=5)
         _create_payment_method("cash")
@@ -261,7 +278,6 @@ class TestLogicAndEndpoints:
 
     @pytest.mark.django_db
     def test_delivery_status_endpoint(self, auth_client):
-        # Aseguramos que existan los estados (por si no se corrió el seeder en test config)
         models.Status.objects.get_or_create(id=1, name="pending")
         models.Status.objects.get_or_create(id=2, name="in_progress")
         models.Status.objects.get_or_create(id=3, name="completed")
@@ -270,7 +286,6 @@ class TestLogicAndEndpoints:
         product = _create_product()
         models.Package.objects.create(delivery=delivery, product=product, quantity=5)
 
-        # Transición 1: Pending -> In Progress
         response = auth_client.patch(
             f"/api/deliveries/{delivery.id}/status/", {"step": 1}, format="json"
         )
@@ -278,7 +293,6 @@ class TestLogicAndEndpoints:
         delivery.refresh_from_db()
         assert delivery.status.name == "in_progress"
 
-        # Transición 2: In Progress -> Completed
         response = auth_client.patch(
             f"/api/deliveries/{delivery.id}/status/", {"step": 1}, format="json"
         )
@@ -286,7 +300,6 @@ class TestLogicAndEndpoints:
         delivery.refresh_from_db()
         assert delivery.status.name == "completed"
 
-        # Debe haber aumentado el inventario porque el estado completó con ID=3
         inventory = models.Inventory.objects.get(store=delivery.store, product=product)
         assert inventory.quantity == 5
 
@@ -363,7 +376,7 @@ class TestApiViews:
         with patch("apps.api.views.publish_handler") as publish_mock:
             create_response = auth_client.post(
                 "/api/products/",
-                {"name": "cookie", "price": "5.00"},
+                {"name": "cookie", "price": "5.00", "sku": 9991},
             )
 
         assert create_response.status_code == 201
@@ -376,6 +389,7 @@ class TestApiViews:
         with patch("apps.api.views.publish_handler") as publish_mock:
             update_response = auth_client.patch(
                 f"/api/products/{product_id}/",
+                {"name": "cookie-updated"},
             )
 
         assert update_response.status_code == 200
@@ -393,8 +407,8 @@ class TestApiViews:
 
     @pytest.mark.django_db
     def test_product_update_duplicate_name(self, auth_client):
-        first = Product.objects.create(name="cookie", price="5.00")
-        second = Product.objects.create(name="cake", price="6.00")
+        first = Product.objects.create(name="cookie", price="5.00", sku=8881)
+        second = Product.objects.create(name="cake", price="6.00", sku=8882)
 
         response = auth_client.patch(
             f"/api/products/{second.id}/",
@@ -408,7 +422,7 @@ class TestApiViews:
     def test_product_validation_price_min(self, auth_client):
         response = auth_client.post(
             "/api/products/",
-            {"name": "cookie", "price": "0.00"},
+            {"name": "cookie", "price": "0.00", "sku": 7771},
         )
 
         assert response.status_code == 400
@@ -418,7 +432,7 @@ class TestApiViews:
     def test_product_validation_duplicate_active_name(self, auth_client, product):
         response = auth_client.post(
             "/api/products/",
-            {"name": product.name, "price": "5.00"},
+            {"name": product.name, "price": "5.00", "sku": 7772},
         )
 
         assert response.status_code == 400
@@ -428,7 +442,7 @@ class TestApiViews:
     def test_product_validation_missing_fields(self, auth_client):
         response = auth_client.post(
             "/api/products/",
-            {"name": "cookie"},
+            {"name": "cookie", "sku": 7773},
         )
 
         assert response.status_code == 400
@@ -438,7 +452,7 @@ class TestApiViews:
     def test_product_validation_blank_fields(self, auth_client):
         response = auth_client.post(
             "/api/products/",
-            {"name": "", "price": "5.00"},
+            {"name": "", "price": "5.00", "sku": 7774},
         )
 
         assert response.status_code == 400
@@ -448,7 +462,7 @@ class TestApiViews:
     def test_product_validation_invalid_price_format(self, auth_client):
         response = auth_client.post(
             "/api/products/",
-            {"name": "cookie", "price": "abc"},
+            {"name": "cookie", "price": "abc", "sku": 7775},
         )
 
         assert response.status_code == 400
@@ -458,7 +472,7 @@ class TestApiViews:
     def test_product_validation_price_decimal_places(self, auth_client):
         response = auth_client.post(
             "/api/products/",
-            {"name": "cookie", "price": "5.123"},
+            {"name": "cookie", "price": "5.123", "sku": 7776},
         )
 
         assert response.status_code == 400
@@ -468,7 +482,7 @@ class TestApiViews:
     def test_product_validation_name_max_length(self, auth_client):
         response = auth_client.post(
             "/api/products/",
-            {"name": "a" * 256, "price": "5.00"},
+            {"name": "a" * 256, "price": "5.00", "sku": 7777},
         )
 
         assert response.status_code == 400
@@ -577,11 +591,12 @@ class TestSerializers:
             data={
                 "name": "cookie",
                 "price": "5.00",
+                "sku": 6661,
                 "version": 99,
             },
         )
 
-        assert serializer.is_valid()
+        assert serializer.is_valid(), serializer.errors
         assert "version" not in serializer.validated_data
         product = serializer.save()
         assert product.version == 1
@@ -601,6 +616,13 @@ class TestSerializers:
         client.force_authenticate(user=admin_user)
 
         store = _create_store()
+
+        # Crear el perfil requerido por las validaciones de tu vista/serializer
+        models.Profile.objects.filter(user=admin_user).delete()
+        models.Profile.objects.create(
+            user=admin_user, establishment=store.establishment, role="store"
+        )
+
         product = _create_product()
         _create_inventory(store=store, product=product, quantity=5)
         _create_payment_method("cash")
@@ -619,7 +641,7 @@ class TestSerializers:
         inventory = models.Inventory.objects.get(store=store, product=product)
         assert inventory.quantity == 2
         sell = models.Sell.objects.get(pk=response.data["id"])
-        assert sell.total == 15
+        assert float(sell.total) == 15.0
         assert models.SellDetail.objects.filter(sell=sell, product=product, quantity=3).exists()
         assert models.Payment.objects.filter(sell=sell, amount="15.00").exists()
 
@@ -629,6 +651,13 @@ class TestSerializers:
         client.force_authenticate(user=admin_user)
 
         store = _create_store()
+
+        # Crear el perfil requerido por las validaciones de tu vista/serializer
+        models.Profile.objects.filter(user=admin_user).delete()
+        models.Profile.objects.create(
+            user=admin_user, establishment=store.establishment, role="store"
+        )
+
         product = _create_product()
         _create_inventory(store=store, product=product, quantity=1)
         _create_payment_method("cash")
@@ -643,9 +672,10 @@ class TestSerializers:
         )
 
         assert response.status_code == 400
+        assert "products" in response.data
         errors = response.data["products"]
         assert isinstance(errors, list)
-        assert errors, errors
+        assert len(errors) > 0
         first = errors[0]
         assert first["product"]["name"] == product.name
         assert int(str(first["available"])) == 1
@@ -656,7 +686,7 @@ class TestSerializers:
     @pytest.mark.django_db
     def test_product_serializer_duplicate_active_name(self, product):
         serializer = ProductSerializer(
-            data={"name": product.name, "price": "5.00"},
+            data={"name": product.name, "price": "5.00", "sku": 5551},
         )
 
         assert serializer.is_valid() is False
@@ -664,7 +694,7 @@ class TestSerializers:
 
     @pytest.mark.django_db
     def test_product_serializer_missing_fields(self):
-        serializer = ProductSerializer(data={"name": "cookie"})
+        serializer = ProductSerializer(data={"name": "cookie", "sku": 5552})
 
         assert serializer.is_valid() is False
         assert "price" in serializer.errors
@@ -672,7 +702,7 @@ class TestSerializers:
     @pytest.mark.django_db
     def test_product_serializer_blank_fields(self):
         serializer = ProductSerializer(
-            data={"name": "", "price": "5.00"},
+            data={"name": "", "price": "5.00", "sku": 5553},
         )
 
         assert serializer.is_valid() is False
@@ -681,7 +711,7 @@ class TestSerializers:
     @pytest.mark.django_db
     def test_product_serializer_invalid_price_format(self):
         serializer = ProductSerializer(
-            data={"name": "cookie", "price": "abc"},
+            data={"name": "cookie", "price": "abc", "sku": 5554},
         )
 
         assert serializer.is_valid() is False
@@ -690,7 +720,7 @@ class TestSerializers:
     @pytest.mark.django_db
     def test_product_serializer_price_decimal_places(self):
         serializer = ProductSerializer(
-            data={"name": "cookie", "price": "5.123"},
+            data={"name": "cookie", "price": "5.123", "sku": 5555},
         )
 
         assert serializer.is_valid() is False
@@ -707,8 +737,8 @@ class TestModels:
 
     @pytest.mark.django_db
     def test_deleted_only_manager(self):
-        active = Product.objects.create(name="cookie", price="5.00")
-        deleted = Product.objects.create(name="cake", price="6.00")
+        active = Product.objects.create(name="cookie", price="5.00", sku=4441)
+        deleted = Product.objects.create(name="cake", price="6.00", sku=4442)
         deleted.delete()
 
         assert Product.objects.filter(pk=deleted.pk).exists() is False
@@ -724,6 +754,7 @@ class TestModels:
         recreate = Product.objects.create(
             name="cookie",
             price="6.00",
+            sku=4443,
         )
 
         assert recreate.pk != product.pk
@@ -863,8 +894,8 @@ class TestAdmin:
 
     @pytest.mark.django_db
     def test_delete_queryset_hard_delete(self, admin_request, product_admin):
-        Product.objects.create(name="cookie", price="5.00")
-        Product.objects.create(name="cake", price="7.00")
+        Product.objects.create(name="cookie", price="5.00", sku=3331)
+        Product.objects.create(name="cake", price="7.00", sku=3332)
 
         with patch("apps.api.admin.publish_handler"):
             product_admin.delete_queryset(admin_request, Product.all_objects.all())

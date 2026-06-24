@@ -1,10 +1,10 @@
 from json import dumps as json_dumps
 from logging import getLogger
-from typing import Literal
+from typing import Any, Literal
 
 from django.contrib.auth.decorators import login_required
-from django.contrib.auth.models import User
 from django.db import transaction
+from django.db.models import Model, QuerySet
 from django.http import StreamingHttpResponse
 from django.views.decorators.http import require_GET
 from django_filters.rest_framework import DjangoFilterBackend
@@ -71,8 +71,10 @@ class MixinViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         """Override the default create behavior to publish an event after saving the new instance."""
 
-        serializer.save()
-        publish_handler(self.model_name, "created", serializer.data, source)
+        instance = serializer.save()
+        instance.refresh_from_db()
+
+        publish_handler(self.model_name, "created", self.get_serializer(instance).data, source)
 
     def perform_update(self, serializer):
         """Override the default update behavior to publish an event after saving the updated instance. Increment the version number on update."""
@@ -81,14 +83,63 @@ class MixinViewSet(viewsets.ModelViewSet):
         instance.version += 1
         instance.save()
 
-        publish_handler(self.model_name, "updated", serializer.data, source)
+        instance.refresh_from_db()
+
+        publish_handler(self.model_name, "updated", self.get_serializer(instance).data, source)
 
     def perform_destroy(self, instance):
         """Override the default destroy behavior to publish an event before deleting the instance. Include the instance data in the event payload before deletion."""
 
         data = self.get_serializer(instance).data
         instance.delete()
+
         publish_handler(self.model_name, "deleted", data, source)
+
+    def get_self_queryset(
+        self,
+        *,
+        model: Model,
+        queryset_select_related_fields: list[str],
+        filter_group_to_all: dict[str, Any],
+        filter_group_to_self: dict[str, Any],
+        filter_query: str,
+    ) -> QuerySet:
+        """
+        Helper method to return a queryset filtered based on the user's permissions. If the user belongs
+        to the group specified in filter_group_to_all, they can see all records. If they belong to the
+        group specified in filter_group_to_self, they can only see records related to their establishment.
+        Otherwise, they cannot see any records.
+        """
+
+        user = self.request.user
+
+        if not user or user.is_anonymous:
+            return model.objects.none()
+
+        queryset = model.objects.select_related(*queryset_select_related_fields)
+
+        if user.is_superuser or user.is_staff or user.groups.filter(**filter_group_to_all).exists():
+            return queryset.all()
+
+        if user.groups.filter(**filter_group_to_self).exists():
+            if hasattr(user, "profile") and user.profile.establishment:
+                user_establishment_id = user.profile.establishment.id
+                return queryset.filter(
+                    **{f"{filter_query}__establishment_id": user_establishment_id}
+                )
+
+            return model.objects.none()
+
+        return model.objects.none()
+
+
+class EstablishmentViewSet(MixinViewSet):
+    model_name = "establishment"
+    queryset = models.Establishment.objects.all()
+    serializer_class = serializers.EstablishmentSerializer
+    permission_classes = [
+        permission(user=["Factory manager"], can=["see"]),
+    ]
 
 
 class FactoryViewSet(MixinViewSet):
@@ -204,7 +255,6 @@ class DeliveryViewSet(MixinViewSet):
 
 class InventoryViewSet(MixinViewSet):
     model_name = "inventory"
-    queryset = models.Inventory.objects.all()
     serializer_class = serializers.InventorySerializer
     permission_classes = [
         any_of(
@@ -214,17 +264,34 @@ class InventoryViewSet(MixinViewSet):
     ]
     filterset_fields = ["store"]
 
+    def get_queryset(self):
+        return self.get_self_queryset(
+            model=models.Inventory,
+            queryset_select_related_fields=["store__establishment"],
+            filter_group_to_all={"name": "Factory manager"},
+            filter_group_to_self={"name": "Store manager"},
+            filter_query="store",
+        )
+
 
 class SellViewSet(MixinViewSet):
     model_name = "sell"
-    queryset = models.Sell.objects.all()
     serializer_class = serializers.SellSerializer
     permission_classes = [
         any_of(
-            permission(user=["Store manager"], can=["see", "create"]),
+            permission(user=["Store manager"], can=["see_self", "create"]),
             permission(user=["Factory manager"], can=["see", "update", "delete"]),
         )
     ]
+
+    def get_queryset(self):
+        return self.get_self_queryset(
+            model=models.Sell,
+            queryset_select_related_fields=["store__establishment"],
+            filter_group_to_all={"name": "Factory manager"},
+            filter_group_to_self={"name": "Store manager"},
+            filter_query="store",
+        )
 
 
 class PaymentMethodViewSet(MixinViewSet):
@@ -248,12 +315,13 @@ class PaymentViewSet(MixinViewSet):
     serializer_class = serializers.PaymentSerializer
 
 
-class UserViewSet(viewsets.ModelViewSet):
-    queryset = User.objects.all()
-    serializer_class = serializers.UserSerializer
+class ProfileViewSet(MixinViewSet):
+    model_name = "profile"
+    queryset = models.Profile.objects.all()
+    serializer_class = serializers.ProfileSerializer
     permission_classes = [
         any_of(
-            permission(user=["Store manager"], can=["see", "update"]),
+            permission(user=["Store manager"], can=["see_self", "update_self"]),
             permission(user=["Factory manager"], can=["see", "create", "update", "delete"]),
         )
     ]
