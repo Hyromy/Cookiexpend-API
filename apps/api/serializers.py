@@ -28,6 +28,15 @@ def _unique_name_validator(model_class, instance, value):
     return value
 
 
+def _check_profile(request):
+    """Helper function to check if the request has an authenticated user with a profile. Raises a ValidationError if not."""
+
+    if not request or not request.user or not hasattr(request.user, "profile"):
+        raise serializers.ValidationError(
+            {"store": "Authenticated user with a store profile is required."}
+        )
+
+
 class NestedMixin:
     """Mixin to create/update models with a nested object in DRF serializers.
 
@@ -88,11 +97,26 @@ class ProfileSerializer(serializers.ModelSerializer):
         except (models.Store.DoesNotExist, models.Factory.DoesNotExist):
             data[key] = None
 
+    def _check_integrity(self, username, email):
+        if not username:
+            raise serializers.ValidationError({"username": "Username is required."})
+
+        if username and models.Profile.objects.filter(user__username=username).exists():
+            raise serializers.ValidationError({"username": "Username is already in use."})
+
+        if not email:
+            raise serializers.ValidationError({"email": "Email is required."})
+
+        if email and models.Profile.objects.filter(user__email=email).exists():
+            raise serializers.ValidationError({"email": "Email is already in use."})
+
     @transaction.atomic
     def create(self, validated_data):
         username = validated_data.pop("username")
         email = validated_data.pop("email")
         role = validated_data.get("role")
+
+        self._check_integrity(username, email)
 
         if not username:
             raise serializers.ValidationError({"username": "Username is required."})
@@ -188,6 +212,15 @@ class ProductSerializer(serializers.ModelSerializer):
         fields = _basic_fields("sku", "name", "price", "img")
         read_only_fields = _basic_fields()
 
+    def to_internal_value(self, data):
+        if hasattr(data, "_mutable"):
+            data._mutable = True
+
+        if "img" in data and not data["img"]:
+            data.pop("img")
+
+        return super().to_internal_value(data)
+
     def validate_name(self, value: str) -> str:
         return _unique_name_validator(models.Product, self.instance, value)
 
@@ -225,7 +258,7 @@ class DeliverySerializer(serializers.ModelSerializer):
     class Meta:
         model = models.Delivery
         fields = _basic_fields("store", "factory", "package")
-        read_only_fields = _basic_fields()
+        read_only_fields = _basic_fields("factory")
 
     def validate_package(self, value):
         if not value:
@@ -241,6 +274,10 @@ class DeliverySerializer(serializers.ModelSerializer):
 
     @transaction.atomic
     def create(self, validated_data):
+        request = self.context.get("request")
+        _check_profile(request)
+        validated_data["factory"] = request.user.profile.establishment.factory
+
         package_data = validated_data.pop("package")
         delivery = models.Delivery.objects.create(**validated_data)
         packages = []
@@ -440,10 +477,7 @@ class SellSerializer(serializers.ModelSerializer):
     @transaction.atomic
     def create(self, validated_data):
         request = self.context.get("request")
-        if not request or not request.user or not hasattr(request.user, "profile"):
-            raise serializers.ValidationError(
-                {"store": "Authenticated user with a store profile is required."}
-            )
+        _check_profile(request)
 
         validated_data["store"] = request.user.profile.establishment.store
 

@@ -1,7 +1,9 @@
 import os
 import uuid
+from io import BytesIO
 from typing import Callable, Literal, Tuple
 
+from django.core.files.base import ContentFile
 from django.db.models import Model
 from django.utils import timezone
 from django.utils.deconstruct import deconstructible
@@ -92,29 +94,29 @@ class ImgHelper:
         """
 
         file_field = getattr(model, field_name, None)
-        if not file_field:
+
+        if not file_field or not file_field.file:
             return
 
-        img_path = file_field.path
-        if not os.path.exists(img_path):
+        try:
+            file_field.file.seek(0)
+            img_handler = Image.open(file_field.file)
+        except Exception:
             return
-
-        img_handler = Image.open(img_path)
 
         for processor in methods:
             img_handler = processor(img_handler)
 
         img_handler = ImgHelper.Method.normalize_channels(img_handler)
 
-        new_path = os.path.splitext(img_path)[0] + ".webp"
-        img_handler.save(new_path, "WEBP", optimize=True, quality=85)
+        buffer = BytesIO()
+        img_handler.save(buffer, "WEBP", optimize=True, quality=85)
+        buffer.seek(0)
 
-        if img_path != new_path:
-            if os.path.exists(img_path):
-                os.remove(img_path)
+        current_name = os.path.basename(file_field.name)
+        new_name = os.path.splitext(current_name)[0] + ".webp"
 
-            relative_new_name = os.path.splitext(file_field.name)[0] + ".webp"
-            model.__class__.objects.filter(id=model.id).update(**{field_name: relative_new_name})
+        file_field.save(new_name, ContentFile(buffer.read()), save=False)
 
 
 @deconstructible

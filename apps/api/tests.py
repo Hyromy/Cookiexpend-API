@@ -209,12 +209,24 @@ def _payload_for_endpoint(endpoint: str) -> dict:
             }
         }
     if endpoint == "deliveries":
-        establishment = _create_establishment("Delivery")
-        factory = _create_factory(establishment)
-        store = _create_store(establishment)
+        User = get_user_model()
+        tester_user = User.objects.get(username="tester")
+
+        establishment_factory = _create_establishment("Main Factory Est")
+        _create_factory(establishment_factory)
+
+        models.Profile.objects.filter(user=tester_user).delete()
+        models.Profile.objects.create(
+            user=tester_user, 
+            establishment=establishment_factory, 
+            role="factory"
+        )
+
+        establishment_store = _create_establishment("Target Store Est")
+        store = _create_store(establishment_store)
         product = _create_product()
+
         return {
-            "factory": factory.id,
             "store": store.id,
             "package": [{"product": product.id, "quantity": 10}],
         }

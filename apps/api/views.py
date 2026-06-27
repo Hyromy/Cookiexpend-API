@@ -189,14 +189,22 @@ class StatusViewSet(MixinViewSet):
 
 class DeliveryViewSet(MixinViewSet):
     model_name = "delivery"
-    queryset = models.Delivery.objects.all()
     serializer_class = serializers.DeliverySerializer
     permission_classes = [
         any_of(
-            permission(user=["Store manager"], can=["see"]),
+            permission(user=["Store manager"], can=["see_self"]),
             permission(user=["Factory manager"], can=["see", "create", "update", "delete"]),
         )
     ]
+
+    def get_queryset(self):
+        return self.get_self_queryset(
+            model=models.Delivery,
+            queryset_select_related_fields=["store__establishment"],
+            filter_group_to_all={"name": "Factory manager"},
+            filter_group_to_self={"name": "Store manager"},
+            filter_query="store",
+        )
 
     @action(
         detail=True,
