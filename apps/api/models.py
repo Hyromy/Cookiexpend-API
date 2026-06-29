@@ -118,7 +118,7 @@ class Store(BaseModel):
 
 
 class Product(BaseModel):
-    sku = models.BigIntegerField(unique=True)
+    sku = models.BigIntegerField()
     name = models.CharField(max_length=255)
     price = money()
     img = models.ImageField(upload_to=ImgHelper.generate_path_in("products"), blank=True, null=True)
@@ -130,13 +130,17 @@ class Product(BaseModel):
                 condition=Q(deleted_at__isnull=True),
                 name="unique_active_product_name",
             ),
+            models.UniqueConstraint(
+                fields=["sku"],
+                condition=Q(deleted_at__isnull=True),
+                name="unique_active_product_sku",
+            ),
         ]
 
     def __str__(self):
         return f"{self.name} - ${self.price}"
 
     def save(self, *args, **kwargs):
-        super().save(*args, **kwargs)
         ImgHelper.save(
             model=self,
             methods=[
@@ -144,6 +148,7 @@ class Product(BaseModel):
                 lambda img: ImgHelper.Method.scale(img, size=(1024, 1024)),
             ],
         )
+        super().save(*args, **kwargs)
 
 
 class Status(BaseModel):
