@@ -72,6 +72,28 @@ class NestedMixin:
         return super().update(instance, validated_data)
 
 
+class PublicMixin:
+    """
+    Mixin to filter serializer fields based on user authentication status.
+    If the user is not authenticated, only the fields specified in `public_fields` will be included
+    in the serialized output.
+    """
+
+    public_fields: set[str]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        if self.public_fields is None:
+            return
+
+        request = self.context.get("request")
+        if request and (not request.user or not request.user.is_authenticated):
+            for field_name in set(self.fields.keys()):
+                if field_name not in self.public_fields:
+                    self.fields.pop(field_name)
+
+
 class UserSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=False)
 
@@ -206,7 +228,9 @@ class StoreSerializer(NestedMixin, serializers.ModelSerializer):
         return self.update_nested(instance, validated_data)
 
 
-class ProductSerializer(serializers.ModelSerializer):
+class ProductSerializer(PublicMixin, serializers.ModelSerializer):
+    public_fields = {"name", "img"}
+
     class Meta:
         model = models.Product
         fields = _basic_fields("sku", "name", "price", "img")

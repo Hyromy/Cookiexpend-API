@@ -15,10 +15,6 @@ router.register(r"inventories", views.InventoryViewSet, basename="inventory")
 router.register(r"sells", views.SellViewSet, basename="sell")
 router.register(r"profiles", views.ProfileViewSet, basename="profile")
 
-router.register(r"payment-methods", views.PaymentMethodViewSet)
-router.register(r"sell-details", views.SellDetailViewSet)
-router.register(r"payments", views.PaymentViewSet)
-
 urlpatterns = [
     path("", include(router.urls)),
     path("health/", views.health_check),
