@@ -22,7 +22,7 @@ SECRET_KEY = config.DJANGO_SECRET_KEY
 
 DEBUG = not config.PRODUCTION
 
-ALLOWED_HOSTS = config.HOSTS_LIST
+ALLOWED_HOSTS = config.HOSTS
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -38,6 +38,7 @@ INSTALLED_APPS = [
     "django_filters",
     "apps.api",
     "apps._auth",
+    "apps.mail",
 ]
 
 MIDDLEWARE = [
@@ -141,7 +142,7 @@ if not DEBUG:
         "rest_framework.renderers.JSONRenderer",
     ]
 
-CORS_ALLOWED_ORIGINS = config.CORS_ALLOWED_LIST
+CORS_ALLOWED_ORIGINS = config.CORS_ALLOWED
 CORS_ALLOW_CREDENTIALS = True
 
 CORS_ALLOW_HEADERS = [
@@ -160,7 +161,7 @@ CORS_ALLOW_HEADERS = [
 
 CSRF_COOKIE_NAME = "csrftoken"
 CSRF_HEADER_NAME = "HTTP_X_CSRFTOKEN"
-CSRF_TRUSTED_ORIGINS = config.CSRF_TRUSTED_LIST
+CSRF_TRUSTED_ORIGINS = config.CSRF_TRUSTED
 CSRF_COOKIE_HTTPONLY = config.PRODUCTION
 if not DEBUG and config.SESSION_DOMAIN:
     CSRF_COOKIE_DOMAIN = config.SESSION_DOMAIN
@@ -173,7 +174,6 @@ if not DEBUG:
     SECURE_SSL_REDIRECT = config.USE_SSL
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
-    CSRF_TRUSTED_ORIGINS = config.CSRF_TRUSTED_LIST
 
     SECURE_HSTS_SECONDS = 31536000
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
@@ -251,3 +251,14 @@ AUTHENTICATION_BACKENDS = [
 
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
+
+if config.USE_EMAIL:
+    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+    EMAIL_HOST = config.EMAIL_HOST
+    EMAIL_PORT = config.EMAIL_PORT
+    EMAIL_USE_TLS = True
+    EMAIL_HOST_USER = config.EMAIL_HOST_USER
+    EMAIL_HOST_PASSWORD = config.EMAIL_HOST_PASSWORD
+else:
+    EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+DEFAULT_FROM_EMAIL = config.DEFAULT_FROM_EMAIL

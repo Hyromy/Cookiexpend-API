@@ -2,7 +2,11 @@ from decimal import Decimal
 
 from django.contrib.auth.models import Group, User
 from django.db import transaction
+from django.utils.crypto import get_random_string
 from rest_framework import serializers
+
+from apps.mail.mails import send_mail
+from project.config import config
 
 from . import models
 
@@ -144,12 +148,24 @@ class ProfileSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({"username": "Username is required."})
 
         new_user = User.objects.create(username=username, email=email)
-        password = "0987654aA"  # TODO: generate random password and sent to email user
+        password = get_random_string(length=8)
         new_user.set_password(password)
         new_user.groups.add(Group.objects.get(name=role.capitalize() + " manager"))
         new_user.save()
 
-        return models.Profile.objects.create(user=new_user, **validated_data)
+        profile = models.Profile.objects.create(user=new_user, **validated_data)
+        send_mail(
+            template="welcome.html",
+            ctx={
+                "user_display_name": new_user.first_name or new_user.username,
+                "temporary_password": password,
+                "login_url": config.DEFAULT_FRONTEND,
+            },
+            subject="¡Bienvenido a Galletas Juanita!",
+            to=[email],
+        )
+
+        return profile
 
     def to_representation(self, instance):
         res = super().to_representation(instance)

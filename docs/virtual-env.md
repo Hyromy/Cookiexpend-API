@@ -30,9 +30,18 @@ _Por defecto, en desarrollo se permiten todos los hosts (`"*"`)_.
 >
 > HOSTS=site.example.com, other.site.com
 
+### `DEFAULT_FRONTEND`
+
+URL del cliente frontend establecido, usado para envío de correos electrónicos y redirecciones.
+
+_Por defecto, en desarrollo toma el valor de `"http://localhost:5173"`_
+
+
 ### `CORS_ALLOWED`
 
 Hosts externos (frontend) que pueden solicitar información al proyecto. Puede definirse más de uno separandolo por comas (`,`).
+
+En caso de definir `DEFAULT_FRONTEND`, ese valor se incluye.
 
 Generalmente se esperan tener los mismos valores que [CSRF_TRUSTED](#csrf_trusted).
 
@@ -43,6 +52,8 @@ Generalmente se esperan tener los mismos valores que [CSRF_TRUSTED](#csrf_truste
 ### `CSRF_TRUSTED`
 
 Hosts externos (frontend) que pueden enviar información o formularios al proyecto. Puede definirse más de uno separandolo por comas (`,`).
+
+En caso de definir `DEFAULT_FRONTEND`, ese valor se incluye.
 
 Generalmente se espera tener los mismos valores que [CORS_ALLOWED](#cors_allowed)
 
@@ -104,3 +115,49 @@ Puerto de la base de datos.
 URL de conexión al servidor de Redis. Se utiliza como bus de mensajes para la sincronización en tiempo real (Pub/Sub) entre la API y otros sistemas.
 
 _Por defecto, en desarrollo toma el valor de `"redis://localhost:6379/0"`_.
+
+## Configuracion de correos (Resend)
+
+### `USE_EMAIL`
+
+Define si usar un servicio de correos (`True`) o imprimir el contenido del correo en la consola (`False`).
+
+_Por defecto, toma el valor de `False`_
+
+### `EMAIL_HOST`
+
+Define el host smtp para envío de correos electrónicos.
+
+_Campo obligatorio en caso de `USE_EMAIL=True`_
+
+### `EMAIL_PORT`
+
+Define el puerto del host smtp para envío de correos electrónicos.
+
+_Campo obligatorio en caso de `USE_EMAIL=True`_
+
+### `EMAIL_HOST_USER`
+
+Define el usuario del host smtp para para envío de correos electrónicos.
+
+_Campo obligatorio en caso de `USE_EMAIL=True`_
+
+### `EMAIL_HOST_PASSWORD`
+
+Define la contraseña o API KEY (según el proveedor smtp) para autenticación de envío de correos electrónicos.
+
+_Campo obligatorio en caso de `USE_EMAIL=True`_
+
+### `EMAIL_DOMAIN`
+
+Define el domino de correos a usar.
+
+> Ejemplo
+>
+> EMAIL_DOMAIN=mails.super-site.com
+
+### `EMAIL_USERNAME`
+
+Define el nombre de usuario del remitente del correo electrónico.
+
+_Campo opcional_

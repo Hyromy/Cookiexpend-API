@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block subject %}{% endblock %}</title>
+    <style>
+        @media screen and (max-width: 600px) {
+            .container {
+                width: 100% !important;
+                padding: 10px !important;
+            }
+            .content {
+                padding: 20px !important;
+            }
+        }
+    </style>
+</head>
+<body style="margin: 0; padding: 0; background-color: #f4f4f7; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased; width: 100% !important;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color: #f4f4f7; width: 100%;">
+        <tr>
+            <td align="center" style="padding: 20px 0;">
+                <table class="container" role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" style="width: 600px; margin: 0 auto;">
+                    <tr>
+                        <td align="center" style="padding: 20px 0;">
+                            <h1 style="margin: 0; font-size: 24px; font-weight: 700; color: #1f2937; letter-spacing: -0.05em;">
+                                Galletas Juanita
+                            </h1>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="content" style="background-color: #ffffff; padding: 40px; border-radius: 8px; border: 1px solid #e5e7eb; box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);">
+                            <div style="font-size: 16px; line-height: 24px; color: #4b5563; margin: 0;">
+                                {% block content %}
+                                {% endblock %}
+                            </div>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td align="center" style="padding: 30px 20px; font-size: 12px; line-height: 18px; color: #9ca3af;">
+                            <p style="margin: 0 0 8px 0;">
+                                Este es un correo automático, por favor no respondas a este mensaje.
+                            </p>
+                            <p style="margin: 0;">
+                                &copy; {{ current_year }} Galletas Juanita. Todos los derechos reservados.
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
