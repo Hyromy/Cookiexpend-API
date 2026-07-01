@@ -13,15 +13,16 @@ from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
+from apps._auth.permissions import (
+    any_of,
+    permission,
+)
+
 from . import models, serializers
 from .gossiper import (
     MODEL,
     publish_handler,
     redis_client,
-)
-from .permissions import (
-    any_of,
-    permission,
 )
 
 logger = getLogger(__name__)
@@ -172,7 +173,7 @@ class ProductViewSet(MixinViewSet):
     serializer_class = serializers.ProductSerializer
     permission_classes = [
         any_of(
-            permission(user=["Store manager"], can=["see"]),
+            permission(user=["Store manager", "Public"], can=["see"]),
             permission(user=["Factory manager"], can=["see", "create", "update", "delete"]),
         )
     ]
@@ -189,14 +190,22 @@ class StatusViewSet(MixinViewSet):
 
 class DeliveryViewSet(MixinViewSet):
     model_name = "delivery"
-    queryset = models.Delivery.objects.all()
     serializer_class = serializers.DeliverySerializer
     permission_classes = [
         any_of(
-            permission(user=["Store manager"], can=["see"]),
+            permission(user=["Store manager"], can=["see_self"]),
             permission(user=["Factory manager"], can=["see", "create", "update", "delete"]),
         )
     ]
+
+    def get_queryset(self):
+        return self.get_self_queryset(
+            model=models.Delivery,
+            queryset_select_related_fields=["store__establishment"],
+            filter_group_to_all={"name": "Factory manager"},
+            filter_group_to_self={"name": "Store manager"},
+            filter_query="store",
+        )
 
     @action(
         detail=True,
@@ -292,27 +301,6 @@ class SellViewSet(MixinViewSet):
             filter_group_to_self={"name": "Store manager"},
             filter_query="store",
         )
-
-
-class PaymentMethodViewSet(MixinViewSet):
-    model_name = "payment_method"
-    queryset = models.PaymentMethod.objects.all()
-    serializer_class = serializers.PaymentMethodSerializer
-    permission_classes = [
-        permission(user=["Store manager", "Factory manager"], can=["see"]),
-    ]
-
-
-class SellDetailViewSet(MixinViewSet):
-    model_name = "sell_detail"
-    queryset = models.SellDetail.objects.all()
-    serializer_class = serializers.SellDetailSerializer
-
-
-class PaymentViewSet(MixinViewSet):
-    model_name = "payment"
-    queryset = models.Payment.objects.all()
-    serializer_class = serializers.PaymentSerializer
 
 
 class ProfileViewSet(MixinViewSet):

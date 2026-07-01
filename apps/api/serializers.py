@@ -2,7 +2,11 @@ from decimal import Decimal
 
 from django.contrib.auth.models import Group, User
 from django.db import transaction
+from django.utils.crypto import get_random_string
 from rest_framework import serializers
+
+from apps.mail.mails import send_mail
+from project.config import config
 
 from . import models
 
@@ -26,6 +30,15 @@ def _unique_name_validator(model_class, instance, value):
         )
 
     return value
+
+
+def _check_profile(request):
+    """Helper function to check if the request has an authenticated user with a profile. Raises a ValidationError if not."""
+
+    if not request or not request.user or not hasattr(request.user, "profile"):
+        raise serializers.ValidationError(
+            {"store": "Authenticated user with a store profile is required."}
+        )
 
 
 class NestedMixin:
@@ -63,6 +76,28 @@ class NestedMixin:
         return super().update(instance, validated_data)
 
 
+class PublicMixin:
+    """
+    Mixin to filter serializer fields based on user authentication status.
+    If the user is not authenticated, only the fields specified in `public_fields` will be included
+    in the serialized output.
+    """
+
+    public_fields: set[str]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        if self.public_fields is None:
+            return
+
+        request = self.context.get("request")
+        if request and (not request.user or not request.user.is_authenticated):
+            for field_name in set(self.fields.keys()):
+                if field_name not in self.public_fields:
+                    self.fields.pop(field_name)
+
+
 class UserSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=False)
 
@@ -88,22 +123,49 @@ class ProfileSerializer(serializers.ModelSerializer):
         except (models.Store.DoesNotExist, models.Factory.DoesNotExist):
             data[key] = None
 
+    def _check_integrity(self, username, email):
+        if not username:
+            raise serializers.ValidationError({"username": "Username is required."})
+
+        if username and models.Profile.objects.filter(user__username=username).exists():
+            raise serializers.ValidationError({"username": "Username is already in use."})
+
+        if not email:
+            raise serializers.ValidationError({"email": "Email is required."})
+
+        if email and models.Profile.objects.filter(user__email=email).exists():
+            raise serializers.ValidationError({"email": "Email is already in use."})
+
     @transaction.atomic
     def create(self, validated_data):
         username = validated_data.pop("username")
         email = validated_data.pop("email")
         role = validated_data.get("role")
 
+        self._check_integrity(username, email)
+
         if not username:
             raise serializers.ValidationError({"username": "Username is required."})
 
         new_user = User.objects.create(username=username, email=email)
-        password = "0987654aA"  # TODO: generate random password and sent to email user
+        password = get_random_string(length=8)
         new_user.set_password(password)
         new_user.groups.add(Group.objects.get(name=role.capitalize() + " manager"))
         new_user.save()
 
-        return models.Profile.objects.create(user=new_user, **validated_data)
+        profile = models.Profile.objects.create(user=new_user, **validated_data)
+        send_mail(
+            template="welcome.html",
+            ctx={
+                "user_display_name": new_user.first_name or new_user.username,
+                "temporary_password": password,
+                "login_url": config.DEFAULT_FRONTEND,
+            },
+            subject="¡Bienvenido a Galletas Juanita!",
+            to=[email],
+        )
+
+        return profile
 
     def to_representation(self, instance):
         res = super().to_representation(instance)
@@ -182,11 +244,22 @@ class StoreSerializer(NestedMixin, serializers.ModelSerializer):
         return self.update_nested(instance, validated_data)
 
 
-class ProductSerializer(serializers.ModelSerializer):
+class ProductSerializer(PublicMixin, serializers.ModelSerializer):
+    public_fields = {"name", "img"}
+
     class Meta:
         model = models.Product
         fields = _basic_fields("sku", "name", "price", "img")
         read_only_fields = _basic_fields()
+
+    def to_internal_value(self, data):
+        if hasattr(data, "_mutable"):
+            data._mutable = True
+
+        if "img" in data and not data["img"]:
+            data.pop("img")
+
+        return super().to_internal_value(data)
 
     def validate_name(self, value: str) -> str:
         return _unique_name_validator(models.Product, self.instance, value)
@@ -225,7 +298,7 @@ class DeliverySerializer(serializers.ModelSerializer):
     class Meta:
         model = models.Delivery
         fields = _basic_fields("store", "factory", "package")
-        read_only_fields = _basic_fields()
+        read_only_fields = _basic_fields("factory")
 
     def validate_package(self, value):
         if not value:
@@ -241,6 +314,10 @@ class DeliverySerializer(serializers.ModelSerializer):
 
     @transaction.atomic
     def create(self, validated_data):
+        request = self.context.get("request")
+        _check_profile(request)
+        validated_data["factory"] = request.user.profile.establishment.factory
+
         package_data = validated_data.pop("package")
         delivery = models.Delivery.objects.create(**validated_data)
         packages = []
@@ -440,10 +517,7 @@ class SellSerializer(serializers.ModelSerializer):
     @transaction.atomic
     def create(self, validated_data):
         request = self.context.get("request")
-        if not request or not request.user or not hasattr(request.user, "profile"):
-            raise serializers.ValidationError(
-                {"store": "Authenticated user with a store profile is required."}
-            )
+        _check_profile(request)
 
         validated_data["store"] = request.user.profile.establishment.store
 
