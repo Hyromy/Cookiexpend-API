@@ -27,7 +27,7 @@ def test_defaults_non_production():
 
     assert config.PRODUCTION is False
     assert config.DJANGO_SECRET_KEY == "insecure-secret-key"
-    assert len(config.HOSTS_LIST) >= 1
+    assert len(config.HOSTS) >= 1
     assert config.REDIS_URL == "redis://localhost:6379/0"
 
 
@@ -38,9 +38,9 @@ def test_parse_list_fields_from_string():
         CSRF_TRUSTED="https://a.com",
     )
 
-    assert config.HOSTS_LIST == ["a.com", "b.com"]
-    assert config.CORS_ALLOWED_LIST == ["https://a.com", "https://b.com"]
-    assert config.CSRF_TRUSTED_LIST == ["https://a.com"]
+    assert set(["a.com", "b.com"]).issubset(set(config.HOSTS))
+    assert set(["https://a.com", "https://b.com"]).issubset(set(config.CORS_ALLOWED))
+    assert set(["https://a.com"]).issubset(set(config.CSRF_TRUSTED))
 
 
 def test_secret_key_min_length_in_production():
@@ -70,6 +70,7 @@ def test_session_domain_required_in_production():
 def test_session_domain_strips_leading_dot():
     kwargs = _base_production_kwargs()
     kwargs["SESSION_DOMAIN"] = ".example.com"
+    kwargs["DEFAULT_FRONTEND"] = "https://example.com"
 
     config = Config(**kwargs)
 

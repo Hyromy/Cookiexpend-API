@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{% block subject %}
+¡Bienvenido a Galletas Juanita!
+{% endblock %}
+
+{% block content %}
+<p style="margin: 0 0 16px 0; font-size: 16px; line-height: 24px; color: #1f2937; font-weight: 600;">
+    ¡Hola, {{ user_display_name }}!
+</p>
+
+<p style="margin: 0 0 16px 0;">
+    Te damos la más cordial bienvenida a la plataforma de <strong>Galletas Juanita</strong>. Tu cuenta ha sido creada con éxito por el administrador y ya está lista para que comiences a trabajar.
+</p>
+
+<p style="margin: 0 0 24px 0;">
+    Para acceder por primera vez, utiliza tu correo electrónico y la contraseña temporal que se te ha proporcionado a continuación:
+</p>
+
+<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; margin-bottom: 24px;">
+    <tr>
+        <td style="padding: 16px;">
+            <p style="margin: 0; font-size: 32px; color: #4b5563; text-align: center;">
+                <span style="font-family: monospace; color: #dc2626; font-weight: bold; background-color: #f3f4f6; padding: 2px 6px; border-radius: 4px;">
+                    {{ temporary_password }}
+                </span>
+            </p>
+        </td>
+    </tr>
+</table>
+
+<p style="margin: 0 0 24px 0; font-size: 14px; color: #6b7280; font-style: italic;">
+    ⚠️ Por seguridad, te recomendamos cambiar tu contraseña en cuanto inicies sesión.
+</p>
+
+<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin: 30px auto 20px auto;">
+    <tr>
+        <td align="center" style="border-radius: 6px; background-color: #2563eb;">
+            <a href="{{ login_url }}" target="_blank" style="border: 1px solid #2563eb; border-radius: 6px; color: #ffffff; display: inline-block; font-size: 16px; font-weight: 600; padding: 12px 24px; text-decoration: none;">
+                Iniciar Sesión Ahora
+            </a>
+        </td>
+    </tr>
+</table>
+
+<p style="margin: 0; padding-top: 16px; border-top: 1px solid #e5e7eb; font-size: 14px; color: #4b5563;">
+    Si tienes algún problema para acceder, por favor ponte en contacto con el encargado de sistemas de la planta.
+</p>
+{% endblock %}
