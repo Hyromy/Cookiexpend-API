@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     "project",
     "apps._api",
     "apps._auth",
+    "apps._catalog",
     "apps._mail",
     "apps.store_mgmt",
 ]
