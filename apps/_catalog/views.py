@@ -58,6 +58,8 @@ class DepartmentViewSet(viewsets.ReadOnlyModelViewSet):
                 "subject_label": data["subject"].label,
                 "sender_name": data["name"],
                 "sender_email": data["email"],
+                "sender_phone": data["phone"],
+                "sender_city": data["city"],
                 "message": data["message"],
             },
             subject=f"New contact message: {data['subject'].label}",

@@ -11,6 +11,8 @@ New contact message: {{ subject_label }}
 
 <p style="margin: 0 0 16px 0;">
     <strong>From:</strong> {{ sender_name }} ({{ sender_email }})<br>
+    {% if sender_phone %}<strong>Phone:</strong> {{ sender_phone }}<br>{% endif %}
+    {% if sender_city %}<strong>City:</strong> {{ sender_city }}<br>{% endif %}
     <strong>Subject:</strong> {{ subject_label }}
 </p>
 

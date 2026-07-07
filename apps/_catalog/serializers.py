@@ -50,6 +50,8 @@ class RetailerSerializer(serializers.ModelSerializer):
 class ContactMessageSerializer(serializers.Serializer):
     name = serializers.CharField(max_length=150)
     email = serializers.EmailField()
+    phone = serializers.CharField(max_length=30, required=False, allow_blank=True, default="")
+    city = serializers.CharField(max_length=100, required=False, allow_blank=True, default="")
     subject = serializers.PrimaryKeyRelatedField(queryset=models.Subject.objects.all())
     message = serializers.CharField(max_length=2000)
 

@@ -30,6 +30,8 @@ class TestDepartmentContact:
                 {
                     "name": "Jane Doe",
                     "email": "jane@example.com",
+                    "phone": "555-1234",
+                    "city": "Springfield",
                     "subject": subject.id,
                     "message": "Hello, I have a question.",
                 },
@@ -41,6 +43,25 @@ class TestDepartmentContact:
         assert kwargs["to"] == [department.email]
         assert kwargs["reply_to"] == ["jane@example.com"]
         assert kwargs["ctx"]["sender_name"] == "Jane Doe"
+        assert kwargs["ctx"]["sender_phone"] == "555-1234"
+        assert kwargs["ctx"]["sender_city"] == "Springfield"
+
+    def test_contact_allows_missing_phone_and_city(self, api_client, department, subject):
+        with patch("apps._catalog.views.send_mail") as send_mail_mock:
+            response = api_client.post(
+                f"/api/departments/{department.id}/contact/",
+                {
+                    "name": "Jane Doe",
+                    "email": "jane@example.com",
+                    "subject": subject.id,
+                    "message": "Hello, I have a question.",
+                },
+            )
+
+        assert response.status_code == 200
+        _, kwargs = send_mail_mock.call_args
+        assert kwargs["ctx"]["sender_phone"] == ""
+        assert kwargs["ctx"]["sender_city"] == ""
 
     def test_contact_rejects_subject_from_other_department(self, api_client, department, subject):
         other_department = models.Department.objects.create(name="Support", email="support@example.com")
