@@ -1,60 +1,9 @@
-from decimal import Decimal
-
 from django.contrib.auth.models import User
-from django.core.validators import MinValueValidator
 from django.db import models
-from django.db.models import Q
 from django.utils import timezone
 
+from apps._api.models import BaseModel, money, unique_active_constraint
 from project.utils import ImgHelper
-
-
-def money():
-    return models.DecimalField(
-        max_digits=6,
-        decimal_places=2,
-        validators=[MinValueValidator(Decimal("0.01"))],
-    )
-
-
-class SoftDeleteQuerySet(models.QuerySet):
-    def active(self):
-        return self.filter(deleted_at__isnull=True)
-
-    def deleted(self):
-        return self.filter(deleted_at__isnull=False)
-
-
-class SoftDeleteManager(models.Manager):
-    def get_queryset(self):
-        return SoftDeleteQuerySet(self.model, using=self._db).active()
-
-    def all_with_deleted(self):
-        return SoftDeleteQuerySet(self.model, using=self._db)
-
-    def deleted_only(self):
-        return self.all_with_deleted().deleted()
-
-
-class BaseModel(models.Model):
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    deleted_at = models.DateTimeField(null=True, blank=True)
-    version = models.PositiveIntegerField(default=1)
-
-    all_objects = models.Manager()
-    objects = SoftDeleteManager()
-
-    class Meta:
-        abstract = True
-
-    def delete(self, using=None, keep_parents=False):
-        self.deleted_at = timezone.now()
-        type(self).all_objects.filter(pk=self.pk).update(deleted_at=self.deleted_at)
-
-    def hard_delete(self, using=None, keep_parents=False):
-        return super().delete(using=using, keep_parents=keep_parents)
-
 
 # zero order
 
@@ -90,11 +39,7 @@ class Factory(BaseModel):
 
     class Meta(BaseModel.Meta):
         constraints = [
-            models.UniqueConstraint(
-                fields=["establishment"],
-                condition=Q(deleted_at__isnull=True),
-                name="unique_active_factory_establishment",
-            ),
+            unique_active_constraint("factory", "establishment"),
         ]
 
     def __str__(self):
@@ -106,11 +51,7 @@ class Store(BaseModel):
 
     class Meta(BaseModel.Meta):
         constraints = [
-            models.UniqueConstraint(
-                fields=["establishment"],
-                condition=Q(deleted_at__isnull=True),
-                name="unique_active_store_establishment",
-            ),
+            unique_active_constraint("store", "establishment"),
         ]
 
     def __str__(self):
@@ -125,16 +66,8 @@ class Product(BaseModel):
 
     class Meta(BaseModel.Meta):
         constraints = [
-            models.UniqueConstraint(
-                fields=["name"],
-                condition=Q(deleted_at__isnull=True),
-                name="unique_active_product_name",
-            ),
-            models.UniqueConstraint(
-                fields=["sku"],
-                condition=Q(deleted_at__isnull=True),
-                name="unique_active_product_sku",
-            ),
+            unique_active_constraint("product", "name"),
+            unique_active_constraint("product", "sku"),
         ]
 
     def __str__(self):
@@ -157,11 +90,7 @@ class Status(BaseModel):
 
     class Meta(BaseModel.Meta):
         constraints = [
-            models.UniqueConstraint(
-                fields=["name"],
-                condition=Q(deleted_at__isnull=True),
-                name="unique_active_status_name",
-            ),
+            unique_active_constraint("status", "name"),
         ]
 
     def __str__(self):
@@ -187,11 +116,7 @@ class Inventory(BaseModel):
 
     class Meta(BaseModel.Meta):
         constraints = [
-            models.UniqueConstraint(
-                fields=["store", "product"],
-                condition=Q(deleted_at__isnull=True),
-                name="unique_active_inventory_store_product",
-            ),
+            unique_active_constraint("inventory", "store", "product"),
         ]
 
     def __str__(self):
@@ -205,11 +130,7 @@ class Sell(BaseModel):
 
     class Meta(BaseModel.Meta):
         constraints = [
-            models.UniqueConstraint(
-                fields=["store", "date"],
-                condition=Q(deleted_at__isnull=True),
-                name="unique_active_sell_store_date",
-            ),
+            unique_active_constraint("sell", "store", "date"),
         ]
 
     def __str__(self):
@@ -221,11 +142,7 @@ class PaymentMethod(BaseModel):
 
     class Meta(BaseModel.Meta):
         constraints = [
-            models.UniqueConstraint(
-                fields=["name"],
-                condition=Q(deleted_at__isnull=True),
-                name="unique_active_payment_method_name",
-            ),
+            unique_active_constraint("payment_method", "name"),
         ]
 
     def __str__(self):
@@ -242,11 +159,7 @@ class Package(BaseModel):
 
     class Meta(BaseModel.Meta):
         constraints = [
-            models.UniqueConstraint(
-                fields=["delivery", "product"],
-                condition=Q(deleted_at__isnull=True),
-                name="unique_active_package_delivery_product",
-            ),
+            unique_active_constraint("package", "delivery", "product"),
         ]
 
     def __str__(self):
@@ -261,11 +174,7 @@ class SellDetail(BaseModel):
 
     class Meta(BaseModel.Meta):
         constraints = [
-            models.UniqueConstraint(
-                fields=["sell", "product"],
-                condition=Q(deleted_at__isnull=True),
-                name="unique_active_sell_details_sell_product",
-            ),
+            unique_active_constraint("sell_detail", "sell", "product"),
         ]
 
     def __str__(self):
@@ -279,11 +188,7 @@ class Payment(BaseModel):
 
     class Meta(BaseModel.Meta):
         constraints = [
-            models.UniqueConstraint(
-                fields=["sell", "payment_method"],
-                condition=Q(deleted_at__isnull=True),
-                name="unique_active_payment_sell_payment_method",
-            ),
+            unique_active_constraint("payment", "sell", "payment_method"),
         ]
 
     def __str__(self):

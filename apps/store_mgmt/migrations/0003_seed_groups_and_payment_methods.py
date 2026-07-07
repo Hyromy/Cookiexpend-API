@@ -3,7 +3,7 @@ from django.db import migrations
 
 def seed_groups_and_payment_methods(apps, schema_editor):
     Group = apps.get_model("auth", "Group")
-    PaymentMethod = apps.get_model("api", "PaymentMethod")
+    PaymentMethod = apps.get_model("store_mgmt", "PaymentMethod")
 
     for name in ["Factory manager", "Store manager"]:
         Group.objects.get_or_create(name=name)
@@ -17,7 +17,7 @@ def seed_groups_and_payment_methods(apps, schema_editor):
 
 def unseed_groups_and_payment_methods(apps, schema_editor):
     Group = apps.get_model("auth", "Group")
-    PaymentMethod = apps.get_model("api", "PaymentMethod")
+    PaymentMethod = apps.get_model("store_mgmt", "PaymentMethod")
 
     Group.objects.filter(name__in=["Factory manager", "Store manager"]).delete()
     PaymentMethod.all_objects.filter(name="cash").delete()
@@ -25,7 +25,7 @@ def unseed_groups_and_payment_methods(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("api", "0002_establishment_sell_remove_product_description_and_more"),
+        ("store_mgmt", "0002_establishment_sell_remove_product_description_and_more"),
         ("auth", "0012_alter_user_first_name_max_length"),
     ]
 

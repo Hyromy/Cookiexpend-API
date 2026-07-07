@@ -10,7 +10,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('api', '0008_product_img_alter_product_sku'),
+        ('store_mgmt', '0008_product_img_alter_product_sku'),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
@@ -29,7 +29,7 @@ class Migration(migrations.Migration):
                 ('deleted_at', models.DateTimeField(blank=True, null=True)),
                 ('version', models.PositiveIntegerField(default=1)),
                 ('role', models.CharField(choices=[('factory', 'Factory'), ('store', 'Store')], max_length=20)),
-                ('establishment', models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, to='api.establishment')),
+                ('establishment', models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, to='store_mgmt.establishment')),
                 ('user', models.OneToOneField(on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL)),
             ],
             options={

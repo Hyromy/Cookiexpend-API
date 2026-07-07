@@ -4,7 +4,7 @@ from django.db import migrations
 
 
 def create_statuses(apps, schema_editor):
-    Status = apps.get_model("api", "Status")
+    Status = apps.get_model("store_mgmt", "Status")
     statuses_data = [
         Status(
             id=1,
@@ -36,13 +36,13 @@ def create_statuses(apps, schema_editor):
 
 
 def remove_statuses(apps, schema_editor):
-    Status = apps.get_model("api", "Status")
+    Status = apps.get_model("store_mgmt", "Status")
     Status._base_manager.filter(id__in=[1, 2, 3, 4, 5]).delete()
 
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("api", "0005_status_delivery_status"),
+        ("store_mgmt", "0005_status_delivery_status"),
     ]
 
     operations = [migrations.RunPython(create_statuses, reverse_code=remove_statuses)]

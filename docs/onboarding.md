@@ -21,15 +21,47 @@ Si vas a ejecutar con Docker, revisa el [manual de operaciones](./runbook.md).
 El proyecto dispone de la estructura estándar de Django, a continuación se detallan solo las carpetas y archivos relevantes.
 
 - `apps/`: Núcleo lógico del proyecto
+  - `_api/`: Mecanismos u utilidades comunes de API REST
   - `_auth/`: Mecanismos de autenticación
-  - `api/`: Modelos, API RESTful e implementación con Redis
-    - `gossiper.py`: Lógica y utilidades de propagación de eventos en redis
+  - `_mail/`: Mecanismos de envío de correos
+  - `*/`: Otras aplicaciones con lógica de negocio
 - `docs/`: Documentación adicional sobre el proyecto
 - `project/`: Configuraciones generales del proyecto
   - `config.py`: Configuraciones de variables de entorno
   - `settings.py`: Configuraciones de comportamiento del proyecto
 
 A medida que se manipula el proyecto, es posible que aparezcan archivos como `db.sqlite3` o carpetas de caché.
+
+## Lógica Común
+
+Para evitar redundancia, dentro de `apps/` se usa el prefijo `_` para identificar las aplicaciones que funcionan como utilerías globales. Estas no manejan lógica de negocio ni procesos principales, sino que sirven para centralizar funciones, clases compartidas o decoradores que cualquier otra app pueda necesitar. Al ser herramientas internas, la mayoría no exponen URLs (aunque hay excepciones). A continuación, se repasa brevemente estas apps y su propósito:
+
+### API
+
+Otorga lógica de paneles de administración, propagación de eventos pub/sub, mixins, restricciones de modelos, entre otros.
+
+- __admin.py:__ Proporciona clases heredables que se encargan de la propagación de eventos, eliminaciones físicas y lógicas a partir del panel de administración de Django.
+- __gossiper.py:__ Proporciona handlers y tipado de modelos y acciones sobre eventos pub/sub.
+- __mixins.py:__ Proporciona mixins a nivel de serializador y viewset para lógica común.
+- __models.py:__ Proporciona restricciones y clases heredables que incluyen capacidad de auditoría y eliminación lógica.
+- __serializers.py:__ Proporciona utilerías de auditoría a nivel de serializador.
+- __views.py:__ Proporciona views o endpoints comunes para APIs REST.
+
+### AUTH
+
+Otorga mecanismos de autenticación y generación de credenciales JWT.
+
+- __backends.py:__ Permite un inicio de sesión flexible mediante un backend de autenticación personalizado.
+- __permissions.py:__ Otorga roles de usuario, permisos de operación HTTP y operadores lógicos para definir y combinar permisos atómicos.
+- __urls.py:__ Expone los endpoints para los mecanismos de autenticación (login con JWT), consulta de la sesión actual y cierre de sesión.
+
+### MAIL
+
+Otorga handlers y plantillas de correo.
+
+- __templates/:__ Plantillas de correo
+- __mails.py:__ Handler para envío de correos especificando plantilla y contexto
+
 
 ## Variables de entorno
 
@@ -250,72 +282,3 @@ Se disponen de varios workflows de GitHub Actions configurados, muchos de ellos 
 | Flujo | Descripción | Trigger |
 | - | - | - |
 | quality.yml | Ejecuta tests y revisiones de código | PRs a __main__ o __dev__ / Manual |
-
-## API
-
-Gran parte del propósito y funcionalidad del proyecto recae en la [API REST](/apps/api/), por lo que se detallan puntos importantes para su desarrollo y mantenimiento.
-
-### Modelos
-
-Los modelos deben incluir la información necesaria para el versionado y el control de borrado:
-
-- `created_at` y `updated_at` para auditoría básica.
-- `version` para controlar cambios y publicar eventos consistentes.
-- `deleted_at` para borrado lógico (soft delete).
-
-Si agregas un modelo nuevo y quieres que participe en los eventos, asegúrate de:
-
-- Incluir `version` y `updated_at` en el modelo.
-- Usar el manager de soft delete (o implementar una lógica equivalente).
-
-### Admin
-
-El panel de Django Admin es el __único lugar donde se permiten borrados definitivos__.
-Fuera del admin, los deletes deben ser lógicos (soft delete) para conservar historial y evitar pérdidas accidentales.
-
-En el admin:
-
-- Usa `all_objects` para ver registros activos e inactivos.
-- Usa `hard_delete()` cuando se necesite eliminar definitivamente.
-- Las acciones de activar/desactivar se basan en `deleted_at`.
-
-### Gossiper
-
-`gossiper.py` existe para __notificar cambios importantes__ (crear, actualizar, eliminar) a otros sistemas usando Redis.
-La idea es simple: cuando algo cambia en la API, se publica un evento con los datos relevantes.
-
-Cómo se usa (a alto nivel):
-
-- Importa `publish_handler`.
-- Pásale el nombre del modelo, el tipo de evento (`created`, `updated`, `deleted`) y los datos serializados.
-- Agrega un `source` si quieres indicar el origen (por ejemplo: `"api request"`, `"admin interface"`, `"web site"`, etc).
-
-Si agregas un modelo nuevo, también debes registrarlo en `gossiper.py` dentro del tipo `MODEL`.
-
-### Serializadores
-
-El serializador es el formato estándar para exponer la información y para alimentar el gossiper.
-Para que el gossiper funcione correctamente, el serializador debe incluir:
-
-- `version`
-- `updated_at`
-
-Además:
-
-- Define `read_only_fields` para evitar que se alteren campos de control.
-- Valida restricciones clave (por ejemplo, nombres únicos en registros activos).
-
-### Vistas y URLs
-
-Las vistas deben ser responsables de __publicar los eventos__ cuando hay cambios:
-
-- `perform_create`: publica `created`.
-- `perform_update`: incrementa `version` y publica `updated`.
-- `perform_destroy`: aplica soft delete y publica `deleted`.
-
-Para exponer el API, registra los `ViewSet` en el router de `urls.py`.
-Las rutas de los recursos deben mantenerse en __plural__ (por ejemplo: `/api/products/`) para consistencia.
-Además, el proyecto incluye endpoints útiles:
-
-- `GET /api/health/` para validar disponibilidad.
-- `GET /api/events/` para consumir eventos en tiempo real.

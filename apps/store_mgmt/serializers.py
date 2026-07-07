@@ -5,16 +5,12 @@ from django.db import transaction
 from django.utils.crypto import get_random_string
 from rest_framework import serializers
 
-from apps.mail.mails import send_mail
+from apps._api.mixins import NestedMixin, PublicMixin
+from apps._api.serializers import auditory_fields
+from apps._mail.mails import send_mail
 from project.config import config
 
 from . import models
-
-
-def _basic_fields(*args: str) -> list[str]:
-    """Helper function to generate basic fields for serializers, including id, created_at, updated_at, and version."""
-
-    return ["id"] + list(args) + ["created_at", "updated_at", "version"]
 
 
 def _unique_name_validator(model_class, instance, value):
@@ -41,63 +37,6 @@ def _check_profile(request):
         )
 
 
-class NestedMixin:
-    """Mixin to create/update models with a nested object in DRF serializers.
-
-    Use it in serializers that accept a nested field (e.g. `establishment`) and
-    need to create or update that related model along with the main one.
-    Requirements: define `nested_field` and `nested_model`, and inherit from
-    `serializers.ModelSerializer` so `update()` exists.
-    """
-
-    nested_field: str
-    nested_model: type[models.BaseModel]
-
-    def create_nested(self, validated_data):
-        """Create the nested model first, then the main model."""
-
-        nested_data = validated_data.pop(self.nested_field)
-        nested_instance = self.nested_model.objects.create(**nested_data)
-        return self.Meta.model.objects.create(
-            **validated_data,
-            **{self.nested_field: nested_instance},
-        )
-
-    def update_nested(self, instance, validated_data):
-        """Update the nested model if provided and delegate the rest."""
-
-        nested_data = validated_data.pop(self.nested_field, None)
-        if nested_data:
-            nested_instance = getattr(instance, self.nested_field)
-            for attr, value in nested_data.items():
-                setattr(nested_instance, attr, value)
-            nested_instance.save()
-
-        return super().update(instance, validated_data)
-
-
-class PublicMixin:
-    """
-    Mixin to filter serializer fields based on user authentication status.
-    If the user is not authenticated, only the fields specified in `public_fields` will be included
-    in the serialized output.
-    """
-
-    public_fields: set[str]
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        if self.public_fields is None:
-            return
-
-        request = self.context.get("request")
-        if request and (not request.user or not request.user.is_authenticated):
-            for field_name in set(self.fields.keys()):
-                if field_name not in self.public_fields:
-                    self.fields.pop(field_name)
-
-
 class UserSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=False)
 
@@ -113,8 +52,8 @@ class ProfileSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = models.Profile
-        fields = _basic_fields("user", "establishment", "role", "username", "email")
-        read_only_fields = _basic_fields("user")
+        fields = auditory_fields("user", "establishment", "role", "username", "email")
+        read_only_fields = auditory_fields("user")
 
     def _find_establishment_relationship(self, data, key, serializer_class, instance):
         try:
@@ -180,8 +119,8 @@ class ProfileSerializer(serializers.ModelSerializer):
 class EstablishmentSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.Establishment
-        fields = _basic_fields("name", "municipality", "neighborhood", "street", "number")
-        read_only_fields = _basic_fields()
+        fields = auditory_fields("name", "municipality", "neighborhood", "street", "number")
+        read_only_fields = auditory_fields()
 
     def validate_name(self, value: str) -> str:
         return _unique_name_validator(models.Establishment, self.instance, value)
@@ -206,8 +145,8 @@ class FactorySerializer(NestedMixin, serializers.ModelSerializer):
 
     class Meta:
         model = models.Factory
-        fields = _basic_fields("establishment")
-        read_only_fields = _basic_fields()
+        fields = auditory_fields("establishment")
+        read_only_fields = auditory_fields()
 
     def to_representation(self, instance):
         res = super().to_representation(instance)
@@ -229,8 +168,8 @@ class StoreSerializer(NestedMixin, serializers.ModelSerializer):
 
     class Meta:
         model = models.Store
-        fields = _basic_fields("establishment")
-        read_only_fields = _basic_fields()
+        fields = auditory_fields("establishment")
+        read_only_fields = auditory_fields()
 
     def to_representation(self, instance):
         res = super().to_representation(instance)
@@ -249,8 +188,8 @@ class ProductSerializer(PublicMixin, serializers.ModelSerializer):
 
     class Meta:
         model = models.Product
-        fields = _basic_fields("sku", "name", "price", "img")
-        read_only_fields = _basic_fields()
+        fields = auditory_fields("sku", "name", "price", "img")
+        read_only_fields = auditory_fields()
 
     def to_internal_value(self, data):
         if hasattr(data, "_mutable"):
@@ -268,8 +207,8 @@ class ProductSerializer(PublicMixin, serializers.ModelSerializer):
 class PackageSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.Package
-        fields = _basic_fields("delivery", "product", "quantity")
-        read_only_fields = _basic_fields()
+        fields = auditory_fields("delivery", "product", "quantity")
+        read_only_fields = auditory_fields()
 
     def to_representation(self, instance):
         res = super().to_representation(instance)
@@ -281,8 +220,8 @@ class PackageSerializer(serializers.ModelSerializer):
 class StatusSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.Status
-        fields = _basic_fields("name", "description")
-        read_only_fields = _basic_fields()
+        fields = auditory_fields("name", "description")
+        read_only_fields = auditory_fields()
 
     def validate_name(self, value: str) -> str:
         return _unique_name_validator(models.Status, self.instance, value)
@@ -297,8 +236,8 @@ class DeliverySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = models.Delivery
-        fields = _basic_fields("store", "factory", "package")
-        read_only_fields = _basic_fields("factory")
+        fields = auditory_fields("store", "factory", "package")
+        read_only_fields = auditory_fields("factory")
 
     def validate_package(self, value):
         if not value:
@@ -384,8 +323,8 @@ class DeliverySerializer(serializers.ModelSerializer):
 class InventorySerializer(serializers.ModelSerializer):
     class Meta:
         model = models.Inventory
-        fields = _basic_fields("store", "product", "quantity")
-        read_only_fields = _basic_fields()
+        fields = auditory_fields("store", "product", "quantity")
+        read_only_fields = auditory_fields()
 
     def to_representation(self, instance):
         res = super().to_representation(instance)
@@ -403,8 +342,8 @@ class SellSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = models.Sell
-        fields = _basic_fields("store", "date", "total", "products")
-        read_only_fields = _basic_fields("store", "total")
+        fields = auditory_fields("store", "date", "total", "products")
+        read_only_fields = auditory_fields("store", "total")
 
     def validate_products(self, value):
         if self.instance is not None:
@@ -553,8 +492,8 @@ class SellSerializer(serializers.ModelSerializer):
 class PaymentMethodSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.PaymentMethod
-        fields = _basic_fields("name")
-        read_only_fields = _basic_fields()
+        fields = auditory_fields("name")
+        read_only_fields = auditory_fields()
 
     def validate_name(self, value: str) -> str:
         return _unique_name_validator(models.PaymentMethod, self.instance, value)
@@ -563,8 +502,8 @@ class PaymentMethodSerializer(serializers.ModelSerializer):
 class SellDetailNestedSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.SellDetail
-        fields = _basic_fields("product", "quantity", "price")
-        read_only_fields = _basic_fields()
+        fields = auditory_fields("product", "quantity", "price")
+        read_only_fields = auditory_fields()
 
     def to_representation(self, instance):
         res = super().to_representation(instance)
@@ -575,8 +514,8 @@ class SellDetailNestedSerializer(serializers.ModelSerializer):
 class PaymentNestedSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.Payment
-        fields = _basic_fields("payment_method", "amount")
-        read_only_fields = _basic_fields()
+        fields = auditory_fields("payment_method", "amount")
+        read_only_fields = auditory_fields()
 
     def to_representation(self, instance):
         res = super().to_representation(instance)
@@ -587,8 +526,8 @@ class PaymentNestedSerializer(serializers.ModelSerializer):
 class SellDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.SellDetail
-        fields = _basic_fields("sell", "product", "quantity", "price")
-        read_only_fields = _basic_fields()
+        fields = auditory_fields("sell", "product", "quantity", "price")
+        read_only_fields = auditory_fields()
 
     def to_representation(self, instance):
         res = super().to_representation(instance)
@@ -600,8 +539,8 @@ class SellDetailSerializer(serializers.ModelSerializer):
 class PaymentSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.Payment
-        fields = _basic_fields("sell", "payment_method", "amount")
-        read_only_fields = _basic_fields()
+        fields = auditory_fields("sell", "payment_method", "amount")
+        read_only_fields = auditory_fields()
 
     def to_representation(self, instance):
         res = super().to_representation(instance)
