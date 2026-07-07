@@ -1,16 +1,15 @@
 from django.contrib import admin
-from django.utils import timezone
+from django.utils.timezone import now
 
-from . import models, serializers
 from .gossiper import (
     MODEL,
     publish_handler,
 )
 
-source = "admin interface"
+SOURCE = "admin interface"
 
 
-class Panel:
+class AdminPanel:
     """
     Base admin panel with soft delete and publish capabilities.
 
@@ -25,7 +24,7 @@ class Panel:
     ordering = ("-created_at",)
     readonly_fields = ("version", "deleted_at", "created_at", "updated_at")
     actions = ("deactivate_selected", "activate_selected")
-    change_form_template = "admin/api/product/change_form.html"
+    change_form_template = "change_form.html"
 
     model_name: MODEL = None
     model_class = None
@@ -63,12 +62,12 @@ class Panel:
         """Soft delete selected objects and publish the deletion event."""
 
         for obj in queryset:
-            deleted_at = timezone.now()
+            deleted_at = now()
             type(obj).all_objects.filter(pk=obj.pk).update(deleted_at=deleted_at)
             obj.deleted_at = deleted_at
 
             if self._can_publish():
-                publish_handler(self.model_name, "deleted", self.serializer_class(obj).data, source)
+                publish_handler(self.model_name, "deleted", self.serializer_class(obj).data, SOURCE)
 
     @admin.action(description="Activate selected products")
     def activate_selected(self, request, queryset):
@@ -82,7 +81,7 @@ class Panel:
             obj.deleted_at = None
 
             if self._can_publish():
-                publish_handler(self.model_name, "created", self.serializer_class(obj).data, source)
+                publish_handler(self.model_name, "created", self.serializer_class(obj).data, SOURCE)
 
     def get_queryset(self, request):
         """Override to include soft-deleted objects in the queryset for admin actions."""
@@ -102,14 +101,14 @@ class Panel:
                 self.model_name,
                 "updated" if change else "created",
                 self.serializer_class(obj).data,
-                source,
+                SOURCE,
             )
 
     def delete_model(self, request, obj):
         """Hard delete the object and publish the deletion event."""
 
         if self._can_publish():
-            publish_handler(self.model_name, "deleted", self.serializer_class(obj).data, source)
+            publish_handler(self.model_name, "deleted", self.serializer_class(obj).data, SOURCE)
 
         obj.hard_delete()
 
@@ -118,7 +117,7 @@ class Panel:
 
         for obj in queryset:
             if self._can_publish():
-                publish_handler(self.model_name, "deleted", self.serializer_class(obj).data, source)
+                publish_handler(self.model_name, "deleted", self.serializer_class(obj).data, SOURCE)
 
             obj.hard_delete()
 
@@ -135,7 +134,7 @@ class Panel:
                             self.model_name,
                             "deleted",
                             self.serializer_class(obj).data,
-                            source,
+                            SOURCE,
                         )
                     self.message_user(request, f"{self.model_name.capitalize()} deactivated.")
                     return super().response_change(request, obj)
@@ -147,126 +146,9 @@ class Panel:
                         self.model_name,
                         "created",
                         self.serializer_class(obj).data,
-                        source,
+                        SOURCE,
                     )
                     self.message_user(request, f"{self.model_name.capitalize()} activated.")
                     return super().response_change(request, obj)
 
         return super().changeform_view(request, object_id, form_url, extra_context)
-
-
-@admin.register(models.Profile)
-class ProfileAdmin(admin.ModelAdmin):
-    model_name = "profile"
-    model_class = models.Profile
-    serializer_class = serializers.ProfileSerializer
-
-    search_fields = ("user__username", "user__email", "establishment__name")
-
-
-@admin.register(models.Establishment)
-class EstablishmentAdmin(Panel, admin.ModelAdmin):
-    model_name = "establishment"
-    model_class = models.Establishment
-    serializer_class = serializers.EstablishmentSerializer
-
-    search_fields = ("name", "municipality", "neighborhood", "street", "number")
-
-
-@admin.register(models.Factory)
-class FactoryAdmin(Panel, admin.ModelAdmin):
-    model_name = "factory"
-    model_class = models.Factory
-    serializer_class = serializers.FactorySerializer
-
-    search_fields = ("establishment__name",)
-
-
-@admin.register(models.Store)
-class StoreAdmin(Panel, admin.ModelAdmin):
-    model_name = "store"
-    model_class = models.Store
-    serializer_class = serializers.StoreSerializer
-
-    search_fields = ("establishment__name",)
-
-
-@admin.register(models.Product)
-class ProductAdmin(Panel, admin.ModelAdmin):
-    model_name = "product"
-    model_class = models.Product
-    serializer_class = serializers.ProductSerializer
-
-    search_fields = ("sku", "name", "price")
-
-
-@admin.register(models.Status)
-class StatusAdmin(Panel, admin.ModelAdmin):
-    model_name = "status"
-    model_class = models.Status
-    serializer_class = serializers.StatusSerializer
-
-    search_fields = ("name", "description")
-
-
-@admin.register(models.Delivery)
-class DeliveryAdmin(Panel, admin.ModelAdmin):
-    model_name = "delivery"
-    model_class = models.Delivery
-    serializer_class = serializers.DeliverySerializer
-
-    search_fields = ("store__establishment__name", "factory__establishment__name", "status__name")
-
-
-@admin.register(models.Inventory)
-class InventoryAdmin(Panel, admin.ModelAdmin):
-    model_name = "inventory"
-    model_class = models.Inventory
-    serializer_class = serializers.InventorySerializer
-
-    search_fields = ("store__establishment__name", "product__name", "quantity")
-
-
-@admin.register(models.Sell)
-class SellAdmin(Panel, admin.ModelAdmin):
-    model_name = "sell"
-    model_class = models.Sell
-    serializer_class = serializers.SellSerializer
-
-    search_fields = ("store__establishment__name", "date", "total")
-
-
-@admin.register(models.PaymentMethod)
-class PaymentMethodAdmin(Panel, admin.ModelAdmin):
-    model_name = "payment_method"
-    model_class = models.PaymentMethod
-    serializer_class = serializers.PaymentMethodSerializer
-
-    search_fields = ("name",)
-
-
-@admin.register(models.Package)
-class PackageAdmin(Panel, admin.ModelAdmin):
-    model_name = "package"
-    model_class = models.Package
-    serializer_class = serializers.PackageSerializer
-
-    search_fields = ("delivery__store__establishment__name", "product__name", "quantity")
-
-
-@admin.register(models.SellDetail)
-class SellDetailAdmin(Panel, admin.ModelAdmin):
-    model_name = "sell_detail"
-    model_class = models.SellDetail
-    serializer_class = serializers.SellDetailSerializer
-
-    search_fields = ("product__name", "sell__id", "quantity", "price")
-
-
-@admin.register(models.Payment)
-class PaymentAdmin(Panel, admin.ModelAdmin):
-    model_name = "payment"
-    model_class = models.Payment
-    serializer_class = serializers.PaymentSerializer
-
-    search_fields = ("sell__id", "payment_method__name", "amount")

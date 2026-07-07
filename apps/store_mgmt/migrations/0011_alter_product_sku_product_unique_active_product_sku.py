@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('api', '0010_populate_init_data'),
+        ('store_mgmt', '0010_populate_init_data'),
     ]
 
     operations = [

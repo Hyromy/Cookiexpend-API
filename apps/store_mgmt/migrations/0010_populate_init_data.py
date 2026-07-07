@@ -7,9 +7,9 @@ from django.contrib.auth.hashers import make_password
 def populate(apps, schema_editor):
     User = apps.get_model("auth", "User")
     Group = apps.get_model("auth", "Group")
-    Establishment = apps.get_model("api", "Establishment")
-    Factory = apps.get_model("api", "Factory")
-    Profile = apps.get_model("api", "Profile")
+    Establishment = apps.get_model("store_mgmt", "Establishment")
+    Factory = apps.get_model("store_mgmt", "Factory")
+    Profile = apps.get_model("store_mgmt", "Profile")
 
     default_password = "0987654aA"
     admin_username = "Admin"
@@ -61,7 +61,7 @@ def populate(apps, schema_editor):
 
 def rollback_initial_data(apps, schema_editor):
     User = apps.get_model("auth", "User")
-    Establishment = apps.get_model("api", "Establishment")
+    Establishment = apps.get_model("store_mgmt", "Establishment")
 
     User._default_manager.filter(username__in=["Admin", "Planta"]).delete()
     Establishment._default_manager.filter(name="Planta principal").delete()
@@ -69,7 +69,7 @@ def rollback_initial_data(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("api", "0009_alter_product_img_profile"),
+        ("store_mgmt", "0009_alter_product_img_profile"),
     ]
 
     operations = [

@@ -1,33 +1,29 @@
 from json import dumps as json_dumps
 from logging import getLogger
-from typing import Any, Literal
+from typing import Literal
 
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
-from django.db.models import Model, QuerySet
 from django.http import StreamingHttpResponse
 from django.views.decorators.http import require_GET
-from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework import viewsets
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
+from apps._api.gossiper import (
+    publish_handler,
+    redis_client,
+)
+from apps._api.mixins import MixinViewSet
+from apps._api.views import api_health_check
 from apps._auth.permissions import (
     any_of,
     permission,
 )
 
 from . import models, serializers
-from .gossiper import (
-    MODEL,
-    publish_handler,
-    redis_client,
-)
 
 logger = getLogger(__name__)
-
-source = "api request"
 
 
 def status_change_handler(curren_status: str, step: Literal[1, -1]) -> str:
@@ -60,78 +56,6 @@ def status_change_handler(curren_status: str, step: Literal[1, -1]) -> str:
 
         case _:
             raise KeyError("Invalid status")
-
-
-class MixinViewSet(viewsets.ModelViewSet):
-    """Mixin viewset to handle common logic, publishing events to Redis on create, update, and delete operations."""
-
-    model_name: MODEL
-
-    filter_backends = [DjangoFilterBackend]
-
-    def perform_create(self, serializer):
-        """Override the default create behavior to publish an event after saving the new instance."""
-
-        instance = serializer.save()
-        instance.refresh_from_db()
-
-        publish_handler(self.model_name, "created", self.get_serializer(instance).data, source)
-
-    def perform_update(self, serializer):
-        """Override the default update behavior to publish an event after saving the updated instance. Increment the version number on update."""
-
-        instance = serializer.save()
-        instance.version += 1
-        instance.save()
-
-        instance.refresh_from_db()
-
-        publish_handler(self.model_name, "updated", self.get_serializer(instance).data, source)
-
-    def perform_destroy(self, instance):
-        """Override the default destroy behavior to publish an event before deleting the instance. Include the instance data in the event payload before deletion."""
-
-        data = self.get_serializer(instance).data
-        instance.delete()
-
-        publish_handler(self.model_name, "deleted", data, source)
-
-    def get_self_queryset(
-        self,
-        *,
-        model: Model,
-        queryset_select_related_fields: list[str],
-        filter_group_to_all: dict[str, Any],
-        filter_group_to_self: dict[str, Any],
-        filter_query: str,
-    ) -> QuerySet:
-        """
-        Helper method to return a queryset filtered based on the user's permissions. If the user belongs
-        to the group specified in filter_group_to_all, they can see all records. If they belong to the
-        group specified in filter_group_to_self, they can only see records related to their establishment.
-        Otherwise, they cannot see any records.
-        """
-
-        user = self.request.user
-
-        if not user or user.is_anonymous:
-            return model.objects.none()
-
-        queryset = model.objects.select_related(*queryset_select_related_fields)
-
-        if user.is_superuser or user.is_staff or user.groups.filter(**filter_group_to_all).exists():
-            return queryset.all()
-
-        if user.groups.filter(**filter_group_to_self).exists():
-            if hasattr(user, "profile") and user.profile.establishment:
-                user_establishment_id = user.profile.establishment.id
-                return queryset.filter(
-                    **{f"{filter_query}__establishment_id": user_establishment_id}
-                )
-
-            return model.objects.none()
-
-        return model.objects.none()
 
 
 class EstablishmentViewSet(MixinViewSet):
@@ -258,7 +182,7 @@ class DeliveryViewSet(MixinViewSet):
         except Exception as e:
             return Response({"error": str(e)}, status=400)
 
-        publish_handler(self.model_name, "updated", self.get_serializer(delivery).data, source)
+        publish_handler(self.model_name, "updated", self.get_serializer(delivery).data, self.SOURCE)
         return Response(self.get_serializer(delivery).data, status=200)
 
 
@@ -350,4 +274,4 @@ def events(request):
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def health_check(request):
-    return Response({"healthy": True}, status=200)
+    return api_health_check(request)

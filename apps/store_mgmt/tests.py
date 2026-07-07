@@ -12,9 +12,9 @@ from rest_framework.test import APIClient
 
 from . import models
 from .admin import ProductAdmin
-from .gossiper import event_name, publish_handler, redis_payload
 from .models import Product
 from .serializers import ProductSerializer
+from .views import status_change_handler
 
 
 @pytest.fixture()
@@ -82,7 +82,7 @@ def product_admin(admin_site):
 
 @pytest.fixture()
 def admin_request(rf, admin_user):
-    request = rf.get("/admin/api/product/")
+    request = rf.get("/admin/store_mgmt/product/")
     request.user = admin_user
     SessionMiddleware(lambda r: None).process_request(request)
     request.session.save()
@@ -261,8 +261,6 @@ def _payload_for_endpoint(endpoint: str) -> dict:
 
 class TestLogicAndEndpoints:
     def test_status_change_handler_logic(self):
-        from apps.api.views import status_change_handler
-
         assert status_change_handler("pending", 1) == "in_progress"
         assert status_change_handler("in_progress", 1) == "completed"
         assert status_change_handler("in_progress", -1) == "cancelled"
@@ -284,14 +282,14 @@ class TestLogicAndEndpoints:
         models.Package.objects.create(delivery=delivery, product=product, quantity=5)
 
         response = auth_client.patch(
-            f"/api/deliveries/{delivery.id}/status/", {"step": 1}, format="json"
+            f"/api/store-mgmt/deliveries/{delivery.id}/status/", {"step": 1}, format="json"
         )
         assert response.status_code == 200
         delivery.refresh_from_db()
         assert delivery.status.name == "in_progress"
 
         response = auth_client.patch(
-            f"/api/deliveries/{delivery.id}/status/", {"step": 1}, format="json"
+            f"/api/store-mgmt/deliveries/{delivery.id}/status/", {"step": 1}, format="json"
         )
         assert response.status_code == 200
         delivery.refresh_from_db()
@@ -304,20 +302,20 @@ class TestLogicAndEndpoints:
 class TestApiViews:
     @pytest.mark.django_db
     def test_health_check_allows_anonymous(self, api_client):
-        response = api_client.get("/api/health/")
+        response = api_client.get("/api/store-mgmt/health/")
 
         assert response.status_code == 200
         assert response.json() == {"healthy": True}
 
     @pytest.mark.django_db
     def test_products_list_requires_auth(self, api_client):
-        response = api_client.get("/api/products/")
+        response = api_client.get("/api/store-mgmt/products/")
 
         assert response.status_code in {200, 401, 403}
 
     @pytest.mark.django_db
     def test_products_list_with_jwt(self, jwt_client):
-        response = jwt_client.get("/api/products/")
+        response = jwt_client.get("/api/store-mgmt/products/")
 
         assert response.status_code == 200
 
@@ -326,34 +324,34 @@ class TestApiViews:
         client = APIClient()
         client.credentials(HTTP_AUTHORIZATION="Bearer invalid")
 
-        response = client.get("/api/products/")
+        response = client.get("/api/store-mgmt/products/")
 
         assert response.status_code == 401
 
     @pytest.mark.django_db
     def test_product_detail_requires_auth(self, api_client, product):
-        response = api_client.get(f"/api/products/{product.id}/")
+        response = api_client.get(f"/api/store-mgmt/products/{product.id}/")
 
         assert response.status_code in {200, 401, 403}
 
     @pytest.mark.django_db
     def test_product_update_requires_auth(self, api_client, product):
         response = api_client.patch(
-            f"/api/products/{product.id}/",
+            f"/api/store-mgmt/products/{product.id}/",
         )
 
         assert response.status_code in {401, 403}
 
     @pytest.mark.django_db
     def test_product_delete_requires_auth(self, api_client, product):
-        response = api_client.delete(f"/api/products/{product.id}/")
+        response = api_client.delete(f"/api/store-mgmt/products/{product.id}/")
 
         assert response.status_code in {401, 403}
 
     @pytest.mark.django_db
     @pytest.mark.parametrize("endpoint,_model_class", CRUD_ENDPOINTS)
     def test_crud_list_requires_auth(self, api_client, endpoint, _model_class):
-        response = api_client.get(f"/api/{endpoint}/")
+        response = api_client.get(f"/api/store-mgmt/{endpoint}/")
 
         assert response.status_code in {401, 403}
 
@@ -362,17 +360,17 @@ class TestApiViews:
     def test_crud_create_minimal(self, auth_client, endpoint, model_class):
         payload = _payload_for_endpoint(endpoint)
 
-        with patch("apps.api.views.publish_handler"):
-            response = auth_client.post(f"/api/{endpoint}/", payload, format="json")
+        with patch("apps._api.mixins.publish_handler"):
+            response = auth_client.post(f"/api/store-mgmt/{endpoint}/", payload, format="json")
 
         assert response.status_code == 201
         assert model_class.objects.filter(pk=response.data["id"]).exists()
 
     @pytest.mark.django_db
     def test_product_create_update_delete_flow(self, auth_client):
-        with patch("apps.api.views.publish_handler") as publish_mock:
+        with patch("apps._api.mixins.publish_handler") as publish_mock:
             create_response = auth_client.post(
-                "/api/products/",
+                "/api/store-mgmt/products/",
                 {"name": "cookie", "price": "5.00", "sku": 9991},
             )
 
@@ -383,9 +381,9 @@ class TestApiViews:
         product_obj = Product.objects.get(pk=product_id)
         assert product_obj.version == 1
 
-        with patch("apps.api.views.publish_handler") as publish_mock:
+        with patch("apps._api.mixins.publish_handler") as publish_mock:
             update_response = auth_client.patch(
-                f"/api/products/{product_id}/",
+                f"/api/store-mgmt/products/{product_id}/",
                 {"name": "cookie-updated"},
             )
 
@@ -394,8 +392,8 @@ class TestApiViews:
         assert product_obj.version == 2
         publish_mock.assert_called_once()
 
-        with patch("apps.api.views.publish_handler") as publish_mock:
-            delete_response = auth_client.delete(f"/api/products/{product_id}/")
+        with patch("apps._api.mixins.publish_handler") as publish_mock:
+            delete_response = auth_client.delete(f"/api/store-mgmt/products/{product_id}/")
 
         assert delete_response.status_code == 204
         product_obj.refresh_from_db()
@@ -408,7 +406,7 @@ class TestApiViews:
         second = Product.objects.create(name="cake", price="6.00", sku=8882)
 
         response = auth_client.patch(
-            f"/api/products/{second.id}/",
+            f"/api/store-mgmt/products/{second.id}/",
             {"name": first.name},
         )
 
@@ -418,7 +416,7 @@ class TestApiViews:
     @pytest.mark.django_db
     def test_product_validation_price_min(self, auth_client):
         response = auth_client.post(
-            "/api/products/",
+            "/api/store-mgmt/products/",
             {"name": "cookie", "price": "0.00", "sku": 7771},
         )
 
@@ -428,7 +426,7 @@ class TestApiViews:
     @pytest.mark.django_db
     def test_product_validation_duplicate_active_name(self, auth_client, product):
         response = auth_client.post(
-            "/api/products/",
+            "/api/store-mgmt/products/",
             {"name": product.name, "price": "5.00", "sku": 7772},
         )
 
@@ -438,7 +436,7 @@ class TestApiViews:
     @pytest.mark.django_db
     def test_product_validation_missing_fields(self, auth_client):
         response = auth_client.post(
-            "/api/products/",
+            "/api/store-mgmt/products/",
             {"name": "cookie", "sku": 7773},
         )
 
@@ -448,7 +446,7 @@ class TestApiViews:
     @pytest.mark.django_db
     def test_product_validation_blank_fields(self, auth_client):
         response = auth_client.post(
-            "/api/products/",
+            "/api/store-mgmt/products/",
             {"name": "", "price": "5.00", "sku": 7774},
         )
 
@@ -458,7 +456,7 @@ class TestApiViews:
     @pytest.mark.django_db
     def test_product_validation_invalid_price_format(self, auth_client):
         response = auth_client.post(
-            "/api/products/",
+            "/api/store-mgmt/products/",
             {"name": "cookie", "price": "abc", "sku": 7775},
         )
 
@@ -468,7 +466,7 @@ class TestApiViews:
     @pytest.mark.django_db
     def test_product_validation_price_decimal_places(self, auth_client):
         response = auth_client.post(
-            "/api/products/",
+            "/api/store-mgmt/products/",
             {"name": "cookie", "price": "5.123", "sku": 7776},
         )
 
@@ -478,7 +476,7 @@ class TestApiViews:
     @pytest.mark.django_db
     def test_product_validation_name_max_length(self, auth_client):
         response = auth_client.post(
-            "/api/products/",
+            "/api/store-mgmt/products/",
             {"name": "a" * 256, "price": "5.00", "sku": 7777},
         )
 
@@ -487,22 +485,22 @@ class TestApiViews:
 
     @pytest.mark.django_db
     def test_soft_delete_hides_from_list(self, auth_client, product):
-        with patch("apps.api.views.publish_handler"):
-            response = auth_client.delete(f"/api/products/{product.id}/")
+        with patch("apps._api.mixins.publish_handler"):
+            response = auth_client.delete(f"/api/store-mgmt/products/{product.id}/")
 
         assert response.status_code == 204
 
-        list_response = auth_client.get("/api/products/")
+        list_response = auth_client.get("/api/store-mgmt/products/")
         assert list_response.status_code == 200
         assert list_response.data == []
 
     @pytest.mark.django_db
     def test_soft_deleted_retrieve_returns_404(self, auth_client, product):
-        with patch("apps.api.views.publish_handler"):
-            response = auth_client.delete(f"/api/products/{product.id}/")
+        with patch("apps._api.mixins.publish_handler"):
+            response = auth_client.delete(f"/api/store-mgmt/products/{product.id}/")
 
         assert response.status_code == 204
-        retrieve = auth_client.get(f"/api/products/{product.id}/")
+        retrieve = auth_client.get(f"/api/store-mgmt/products/{product.id}/")
         assert retrieve.status_code == 404
 
     @pytest.mark.django_db
@@ -525,9 +523,9 @@ class TestApiViews:
         client = APIClient()
         client.force_login(user)
 
-        with patch("apps.api.views.redis_client") as redis_mock:
+        with patch("apps.store_mgmt.views.redis_client") as redis_mock:
             redis_mock.pubsub.return_value = fake
-            response = client.get("/api/events/")
+            response = client.get("/api/store-mgmt/events/")
             chunks = []
             for chunk in response.streaming_content:
                 if isinstance(chunk, bytes):
@@ -565,9 +563,9 @@ class TestApiViews:
         client = APIClient()
         client.force_login(user)
 
-        with patch("apps.api.views.redis_client") as redis_mock:
+        with patch("apps.store_mgmt.views.redis_client") as redis_mock:
             redis_mock.pubsub.return_value = fake
-            response = client.get("/api/events/")
+            response = client.get("/api/store-mgmt/events/")
             chunks = []
             for chunk in response.streaming_content:
                 if isinstance(chunk, bytes):
@@ -624,9 +622,9 @@ class TestSerializers:
         _create_inventory(store=store, product=product, quantity=5)
         _create_payment_method("cash")
 
-        with patch("apps.api.views.publish_handler"):
+        with patch("apps._api.mixins.publish_handler"):
             response = client.post(
-                "/api/sells/",
+                "/api/store-mgmt/sells/",
                 {
                     "store": store.id,
                     "products": [{"product": product.id, "quantity": 3}],
@@ -660,7 +658,7 @@ class TestSerializers:
         _create_payment_method("cash")
 
         response = client.post(
-            "/api/sells/",
+            "/api/store-mgmt/sells/",
             {
                 "store": store.id,
                 "products": [{"product": product.id, "quantity": 2}],
@@ -774,75 +772,6 @@ class TestModels:
         assert Product.all_objects.filter(pk=product.pk).exists() is False
 
 
-class TestGossiper:
-    def test_event_name_valid(self):
-        assert event_name("product", "created") == "cookiexpend.product.created"
-
-    def test_event_name_invalid(self):
-        with pytest.raises(ValueError):
-            event_name("invalid", "created")
-
-    def test_event_name_invalid_action(self):
-        with pytest.raises(ValueError):
-            event_name("product", "invalid")
-
-    def test_redis_payload_includes_envelope(self):
-        data = {
-            "id": 1,
-            "name": "cookie",
-            "version": 2,
-            "updated_at": "2026-05-10T00:00:00Z",
-        }
-        payload = redis_payload(
-            data,
-            event="cookiexpend.product.created",
-            version=2,
-            updated_at="2026-05-10T00:00:00Z",
-            source="test",
-            model="product",
-            action="created",
-        )
-
-        assert payload["data"] == data
-        assert payload["version"] == 2
-        assert payload["updated_at"] == "2026-05-10T00:00:00Z"
-        assert payload["source"] == "test"
-        assert payload["model"] == "product"
-        assert payload["action"] == "created"
-
-    def test_redis_payload_missing_fields_allows_none(self):
-        data = {"id": 1, "name": "cookie"}
-
-        payload = redis_payload(
-            data,
-            event="cookiexpend.product.created",
-            version=None,
-            updated_at=None,
-            source="test",
-            model="product",
-            action="created",
-        )
-
-        assert payload["data"] == data
-        assert payload["version"] is None
-        assert payload["updated_at"] is None
-
-    def test_publish_handler_calls_publish_on_redis(self):
-        data = {
-            "id": 1,
-            "name": "cookie",
-            "version": 2,
-            "updated_at": "2026-05-10T00:00:00Z",
-        }
-        with patch("apps.api.gossiper.publish_on_redis") as publish_mock:
-            publish_handler("product", "created", data, "test")
-
-        channel, payload = publish_mock.call_args.args
-        assert channel == "cookiexpend.product.created"
-        assert payload["event"] == "cookiexpend.product.created"
-        assert payload["data"] == data
-
-
 class TestAdmin:
     @pytest.mark.django_db
     def test_get_queryset_includes_deleted(self, admin_request, product_admin, product):
@@ -854,7 +783,7 @@ class TestAdmin:
     @pytest.mark.django_db
     def test_deactivate_selected_soft_deletes(self, admin_request, product_admin, product):
         updated_at = product.updated_at
-        with patch("apps.api.admin.publish_handler") as publish_mock:
+        with patch("apps._api.admin.publish_handler") as publish_mock:
             product_admin.deactivate_selected(
                 admin_request,
                 Product.all_objects.filter(pk=product.pk),
@@ -871,7 +800,7 @@ class TestAdmin:
         product.refresh_from_db()
         updated_at = product.updated_at
 
-        with patch("apps.api.admin.publish_handler") as publish_mock:
+        with patch("apps._api.admin.publish_handler") as publish_mock:
             product_admin.activate_selected(
                 admin_request,
                 Product.all_objects.filter(pk=product.pk),
@@ -884,7 +813,7 @@ class TestAdmin:
 
     @pytest.mark.django_db
     def test_delete_model_hard_delete(self, admin_request, product_admin, product):
-        with patch("apps.api.admin.publish_handler"):
+        with patch("apps._api.admin.publish_handler"):
             product_admin.delete_model(admin_request, product)
 
         assert Product.all_objects.filter(pk=product.pk).exists() is False
@@ -894,7 +823,7 @@ class TestAdmin:
         Product.objects.create(name="cookie", price="5.00", sku=3331)
         Product.objects.create(name="cake", price="7.00", sku=3332)
 
-        with patch("apps.api.admin.publish_handler"):
+        with patch("apps._api.admin.publish_handler"):
             product_admin.delete_queryset(admin_request, Product.all_objects.all())
 
         assert Product.all_objects.count() == 0
@@ -904,11 +833,11 @@ class TestAdmin:
         request = _admin_post_request(
             rf,
             admin_user,
-            f"/admin/api/product/{product.pk}/change/",
+            f"/admin/store_mgmt/product/{product.pk}/change/",
             {"_deactivate": "1"},
         )
 
-        with patch("apps.api.admin.publish_handler"):
+        with patch("apps._api.admin.publish_handler"):
             product_admin.changeform_view(request, object_id=str(product.pk))
 
         product.refresh_from_db()
@@ -923,11 +852,11 @@ class TestAdmin:
         request = _admin_post_request(
             rf,
             admin_user,
-            f"/admin/api/product/{product.pk}/change/",
+            f"/admin/store_mgmt/product/{product.pk}/change/",
             {"_activate": "1"},
         )
 
-        with patch("apps.api.admin.publish_handler"):
+        with patch("apps._api.admin.publish_handler"):
             product_admin.changeform_view(request, object_id=str(product.pk))
 
         product.refresh_from_db()

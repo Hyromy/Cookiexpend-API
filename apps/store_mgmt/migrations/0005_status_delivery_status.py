@@ -8,7 +8,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('api', '0004_remove_delivery_unique_active_delivery_factory_store'),
+        ('store_mgmt', '0004_remove_delivery_unique_active_delivery_factory_store'),
     ]
 
     operations = [
@@ -34,6 +34,6 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='delivery',
             name='status',
-            field=models.ForeignKey(default=1, on_delete=django.db.models.deletion.PROTECT, to='api.status'),
+            field=models.ForeignKey(default=1, on_delete=django.db.models.deletion.PROTECT, to='store_mgmt.status'),
         ),
     ]

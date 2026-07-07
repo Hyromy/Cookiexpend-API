@@ -83,7 +83,7 @@ def redis_payload(
 
 
 def publish_handler(model: MODEL, action: EVENT, data: dict, source: str = "unknown", /):
-    """Helper to publish product events to Redis."""
+    """Helper to publish events to Redis."""
 
     event = event_name(model, action)
     publish_on_redis(

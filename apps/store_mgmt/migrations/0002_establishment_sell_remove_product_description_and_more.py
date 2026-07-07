@@ -11,7 +11,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('api', '0001_initial'),
+        ('store_mgmt', '0001_initial'),
     ]
 
     operations = [
@@ -66,7 +66,7 @@ class Migration(migrations.Migration):
                 ('updated_at', models.DateTimeField(auto_now=True)),
                 ('deleted_at', models.DateTimeField(blank=True, null=True)),
                 ('version', models.PositiveIntegerField(default=1)),
-                ('establishment', models.OneToOneField(on_delete=django.db.models.deletion.CASCADE, to='api.establishment')),
+                ('establishment', models.OneToOneField(on_delete=django.db.models.deletion.CASCADE, to='store_mgmt.establishment')),
             ],
             options={
                 'abstract': False,
@@ -83,7 +83,7 @@ class Migration(migrations.Migration):
                 ('updated_at', models.DateTimeField(auto_now=True)),
                 ('deleted_at', models.DateTimeField(blank=True, null=True)),
                 ('version', models.PositiveIntegerField(default=1)),
-                ('factory', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='api.factory')),
+                ('factory', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='store_mgmt.factory')),
             ],
             options={
                 'abstract': False,
@@ -101,8 +101,8 @@ class Migration(migrations.Migration):
                 ('deleted_at', models.DateTimeField(blank=True, null=True)),
                 ('version', models.PositiveIntegerField(default=1)),
                 ('quantity', models.PositiveIntegerField()),
-                ('delivery', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='api.delivery')),
-                ('product', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='api.product')),
+                ('delivery', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='store_mgmt.delivery')),
+                ('product', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='store_mgmt.product')),
             ],
             options={
                 'abstract': False,
@@ -138,8 +138,8 @@ class Migration(migrations.Migration):
                 ('deleted_at', models.DateTimeField(blank=True, null=True)),
                 ('version', models.PositiveIntegerField(default=1)),
                 ('amount', models.DecimalField(decimal_places=2, max_digits=6, validators=[django.core.validators.MinValueValidator(Decimal('0.01'))])),
-                ('payment_method', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='api.paymentmethod')),
-                ('sell', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='api.sell')),
+                ('payment_method', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='store_mgmt.paymentmethod')),
+                ('sell', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='store_mgmt.sell')),
             ],
             options={
                 'abstract': False,
@@ -158,8 +158,8 @@ class Migration(migrations.Migration):
                 ('version', models.PositiveIntegerField(default=1)),
                 ('quantity', models.PositiveIntegerField()),
                 ('price', models.DecimalField(decimal_places=2, max_digits=6, validators=[django.core.validators.MinValueValidator(Decimal('0.01'))])),
-                ('product', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='api.product')),
-                ('sell', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='api.sell')),
+                ('product', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='store_mgmt.product')),
+                ('sell', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='store_mgmt.sell')),
             ],
             options={
                 'abstract': False,
@@ -176,7 +176,7 @@ class Migration(migrations.Migration):
                 ('updated_at', models.DateTimeField(auto_now=True)),
                 ('deleted_at', models.DateTimeField(blank=True, null=True)),
                 ('version', models.PositiveIntegerField(default=1)),
-                ('establishment', models.OneToOneField(on_delete=django.db.models.deletion.CASCADE, to='api.establishment')),
+                ('establishment', models.OneToOneField(on_delete=django.db.models.deletion.CASCADE, to='store_mgmt.establishment')),
             ],
             options={
                 'abstract': False,
@@ -188,7 +188,7 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='sell',
             name='store',
-            field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='api.store'),
+            field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='store_mgmt.store'),
         ),
         migrations.CreateModel(
             name='Inventory',
@@ -199,8 +199,8 @@ class Migration(migrations.Migration):
                 ('deleted_at', models.DateTimeField(blank=True, null=True)),
                 ('version', models.PositiveIntegerField(default=1)),
                 ('quantity', models.PositiveIntegerField()),
-                ('product', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='api.product')),
-                ('store', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='api.store')),
+                ('product', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='store_mgmt.product')),
+                ('store', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='store_mgmt.store')),
             ],
             options={
                 'abstract': False,
@@ -212,7 +212,7 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='delivery',
             name='store',
-            field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='api.store'),
+            field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='store_mgmt.store'),
         ),
         migrations.AddConstraint(
             model_name='factory',
