@@ -4,9 +4,16 @@ from django.utils.html import strip_tags
 from django.utils.timezone import now
 
 
-def send_mail(*, template: str, ctx: dict[str, str], subject: str, to: list[str]):
+def send_mail(
+    *,
+    template: str,
+    ctx: dict[str, str],
+    subject: str,
+    to: list[str],
+    reply_to: list[str] | None = None,
+):
     ctx["current_year"] = now().year
-    
+
     html_content = render_to_string(template, ctx)
 
     email = EmailMultiAlternatives(
@@ -14,6 +21,7 @@ def send_mail(*, template: str, ctx: dict[str, str], subject: str, to: list[str]
         body=strip_tags(html_content),
         from_email=None,
         to=to,
+        reply_to=reply_to,
     )
     email.attach_alternative(html_content, "text/html")
 

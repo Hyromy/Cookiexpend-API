@@ -45,3 +45,16 @@ class RetailerSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.Retailer
         fields = ["id", "name", "address", "state", "municipality", "lat", "lng"]
+
+
+class ContactMessageSerializer(serializers.Serializer):
+    name = serializers.CharField(max_length=150)
+    email = serializers.EmailField()
+    subject = serializers.PrimaryKeyRelatedField(queryset=models.Subject.objects.all())
+    message = serializers.CharField(max_length=2000)
+
+    def validate_subject(self, value):
+        department = self.context["department"]
+        if value.department_id != department.id:
+            raise serializers.ValidationError("Subject does not belong to this department.")
+        return value

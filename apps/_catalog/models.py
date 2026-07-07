@@ -53,6 +53,7 @@ class FAQ(BaseModel):
 
 class Department(BaseModel):
     name = models.CharField(max_length=100)
+    email = models.EmailField(blank=True, default="")
     order = models.PositiveSmallIntegerField(default=0)
 
     class Meta(BaseModel.Meta):
