@@ -308,10 +308,12 @@ class TestApiViews:
         assert response.json() == {"healthy": True}
 
     @pytest.mark.django_db
-    def test_products_list_requires_auth(self, api_client):
+    def test_products_list_allows_anonymous_and_hides_sensitive_fields(self, api_client, product):
         response = api_client.get("/api/store-mgmt/products/")
 
-        assert response.status_code in {200, 401, 403}
+        assert response.status_code == 200
+        assert "sku" not in response.data[0]
+        assert "price" not in response.data[0]
 
     @pytest.mark.django_db
     def test_products_list_with_jwt(self, jwt_client):
@@ -329,10 +331,20 @@ class TestApiViews:
         assert response.status_code == 401
 
     @pytest.mark.django_db
-    def test_product_detail_requires_auth(self, api_client, product):
+    def test_product_detail_allows_anonymous_and_hides_sensitive_fields(self, api_client, product):
         response = api_client.get(f"/api/store-mgmt/products/{product.id}/")
 
-        assert response.status_code in {200, 401, 403}
+        assert response.status_code == 200
+        assert "sku" not in response.data
+        assert "price" not in response.data
+
+    @pytest.mark.django_db
+    def test_product_detail_with_auth_shows_sensitive_fields(self, auth_client, product):
+        response = auth_client.get(f"/api/store-mgmt/products/{product.id}/")
+
+        assert response.status_code == 200
+        assert response.data["sku"] == str(product.sku)
+        assert "price" in response.data
 
     @pytest.mark.django_db
     def test_product_update_requires_auth(self, api_client, product):

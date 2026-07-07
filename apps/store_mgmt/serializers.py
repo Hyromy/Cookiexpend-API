@@ -7,6 +7,7 @@ from rest_framework import serializers
 
 from apps._api.mixins import NestedMixin, PublicMixin
 from apps._api.serializers import auditory_fields
+from apps._catalog.serializers import CategorySerializer, PresentationSerializer
 from apps._mail.mails import send_mail
 from project.config import config
 
@@ -183,12 +184,20 @@ class StoreSerializer(NestedMixin, serializers.ModelSerializer):
         return self.update_nested(instance, validated_data)
 
 
+class VarianteSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = models.Product
+        fields = ["id", "slug", "name"]
+
+
 class ProductSerializer(PublicMixin, serializers.ModelSerializer):
-    public_fields = {"name", "img"}
+    public_fields = {"name", "slug", "description", "badge", "img", "category", "presentation", "variantes"}
 
     class Meta:
         model = models.Product
-        fields = auditory_fields("sku", "name", "price", "img")
+        fields = auditory_fields(
+            "sku", "name", "slug", "description", "badge", "price", "img", "category", "presentation", "variantes"
+        )
         read_only_fields = auditory_fields()
 
     def to_internal_value(self, data):
@@ -199,6 +208,18 @@ class ProductSerializer(PublicMixin, serializers.ModelSerializer):
             data.pop("img")
 
         return super().to_internal_value(data)
+
+    def to_representation(self, instance):
+        res = super().to_representation(instance)
+        if "category" in res:
+            res["category"] = CategorySerializer(instance.category).data if instance.category_id else None
+        if "presentation" in res:
+            res["presentation"] = (
+                PresentationSerializer(instance.presentation).data if instance.presentation_id else None
+            )
+        if "variantes" in res:
+            res["variantes"] = VarianteSerializer(instance.variantes.all(), many=True).data
+        return res
 
     def validate_name(self, value: str) -> str:
         return _unique_name_validator(models.Product, self.instance, value)
