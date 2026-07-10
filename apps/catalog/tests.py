@@ -24,7 +24,7 @@ def subject(department):
 @pytest.mark.django_db
 class TestDepartmentContact:
     def test_contact_sends_email_to_department(self, api_client, department, subject):
-        with patch("apps._catalog.views.send_mail") as send_mail_mock:
+        with patch("apps.catalog.views.send_mail") as send_mail_mock:
             response = api_client.post(
                 f"/api/departments/{department.id}/contact/",
                 {
@@ -47,7 +47,7 @@ class TestDepartmentContact:
         assert kwargs["ctx"]["sender_city"] == "Springfield"
 
     def test_contact_allows_missing_phone_and_city(self, api_client, department, subject):
-        with patch("apps._catalog.views.send_mail") as send_mail_mock:
+        with patch("apps.catalog.views.send_mail") as send_mail_mock:
             response = api_client.post(
                 f"/api/departments/{department.id}/contact/",
                 {

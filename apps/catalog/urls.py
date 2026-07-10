@@ -1,6 +1,6 @@
 from rest_framework.routers import DefaultRouter
 
-from apps._catalog import views
+from apps.catalog import views
 
 router = DefaultRouter()
 router.register(r"categories", views.CategoryViewSet, basename="category")

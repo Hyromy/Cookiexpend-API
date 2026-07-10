@@ -3,8 +3,8 @@ from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
-from apps._catalog import models, serializers
 from apps._mail.mails import send_mail
+from apps.catalog import models, serializers
 
 
 class CategoryViewSet(viewsets.ReadOnlyModelViewSet):

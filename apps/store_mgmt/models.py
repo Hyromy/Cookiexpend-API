@@ -60,7 +60,7 @@ class Store(BaseModel):
 
 
 class Product(BaseModel):
-    sku = models.CharField(max_length=50)
+    sku = models.CharField(max_length=18)
     name = models.CharField(max_length=255)
     slug = models.SlugField(blank=True)
     description = models.TextField(blank=True, default="", max_length=500)
@@ -68,10 +68,10 @@ class Product(BaseModel):
     price = money()
     img = models.ImageField(upload_to=ImgHelper.generate_path_in("products"), blank=True, null=True)
     category = models.ForeignKey(
-        "_catalog.Category", on_delete=models.SET_NULL, null=True, blank=True
+        "catalog.Category", on_delete=models.SET_NULL, null=True, blank=True
     )
     presentation = models.ForeignKey(
-        "_catalog.Presentation", on_delete=models.SET_NULL, null=True, blank=True
+        "catalog.Presentation", on_delete=models.SET_NULL, null=True, blank=True
     )
     variantes = models.ManyToManyField("self", blank=True, symmetrical=True)
 

@@ -9,7 +9,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('_catalog', '0002_category_orden'),
+        ('catalog', '0002_category_orden'),
     ]
 
     operations = [
@@ -105,7 +105,7 @@ class Migration(migrations.Migration):
                 ('version', models.PositiveIntegerField(default=1)),
                 ('label', models.CharField(max_length=150)),
                 ('order', models.PositiveSmallIntegerField(default=0)),
-                ('department', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='subjects', to='_catalog.department')),
+                ('department', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='subjects', to='catalog.department')),
             ],
             options={
                 'ordering': ['order'],

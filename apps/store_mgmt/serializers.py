@@ -7,8 +7,8 @@ from rest_framework import serializers
 
 from apps._api.mixins import NestedMixin, PublicMixin
 from apps._api.serializers import auditory_fields
-from apps._catalog.serializers import CategorySerializer, PresentationSerializer
 from apps._mail.mails import send_mail
+from apps.catalog.serializers import CategorySerializer, PresentationSerializer
 from project.config import config
 
 from . import models

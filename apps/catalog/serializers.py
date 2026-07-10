@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from apps._catalog import models
+from apps.catalog import models
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -41,10 +41,20 @@ class DepartmentSerializer(serializers.ModelSerializer):
         fields = ["id", "name", "order", "subjects"]
 
 
+class BrandSerializer(serializers.ModelSerializer):
+    logo_url = serializers.ImageField(source="logo", read_only=True)
+
+    class Meta:
+        model = models.Brand
+        fields = ["id", "name", "logo_url"]
+
+
 class RetailerSerializer(serializers.ModelSerializer):
+    brand = BrandSerializer(read_only=True)
+
     class Meta:
         model = models.Retailer
-        fields = ["id", "name", "address", "state", "municipality", "lat", "lng"]
+        fields = ["id", "name", "address", "state", "municipality", "lat", "lng", "brand"]
 
 
 class ContactMessageSerializer(serializers.Serializer):

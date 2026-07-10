@@ -71,6 +71,19 @@ class Subject(BaseModel):
         ordering = ["order"]
 
 
+class Brand(BaseModel):
+    name = models.CharField(max_length=200)
+    logo = models.ImageField(
+        upload_to=ImgHelper.generate_path_in("brands"), blank=True, null=True
+    )
+
+    class Meta(BaseModel.Meta):
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+
 class Retailer(BaseModel):
     name = models.CharField(max_length=200)
     address = models.CharField(max_length=300)
@@ -78,6 +91,12 @@ class Retailer(BaseModel):
     municipality = models.CharField(max_length=100)
     lat = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     lng = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    brand = models.ForeignKey(
+        Brand, on_delete=models.SET_NULL, null=True, blank=True, related_name="retailers"
+    )
 
     class Meta(BaseModel.Meta):
         ordering = ["state", "municipality"]
+
+    def __str__(self):
+        return self.name

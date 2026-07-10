@@ -7,7 +7,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('_catalog', '0003_galeria_faq_departamento_asunto_retailer'),
+        ('catalog', '0003_galeria_faq_departamento_asunto_retailer'),
         ('store_mgmt', '0012_remove_selldetail_unique_active_sell_details_sell_product_and_more'),
     ]
 
@@ -20,7 +20,7 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='product',
             name='category',
-            field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, to='_catalog.category'),
+            field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, to='catalog.category'),
         ),
         migrations.AddField(
             model_name='product',
@@ -30,7 +30,7 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='product',
             name='presentation',
-            field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, to='_catalog.presentation'),
+            field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, to='catalog.presentation'),
         ),
         migrations.AddField(
             model_name='product',

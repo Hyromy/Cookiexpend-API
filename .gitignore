@@ -89,3 +89,6 @@ Desktop.ini
 
 # media files
 media/
+
+# local-only catalog CSV import command
+apps/catalog/management/
