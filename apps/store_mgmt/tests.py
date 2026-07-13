@@ -9,6 +9,7 @@ from django.contrib.messages.storage.fallback import FallbackStorage
 from django.contrib.sessions.middleware import SessionMiddleware
 from django.test import RequestFactory
 from rest_framework.test import APIClient
+from apps.catalog import models as catalog_models
 
 from . import models
 from .admin import ProductAdmin
@@ -349,6 +350,18 @@ class TestApiViews:
         assert response.status_code == 200
         assert "sku" not in response.data
         assert "price" not in response.data
+
+    @pytest.mark.django_db
+    def test_product_detail_category_logo_is_absolute_url(self, api_client, product):
+        category = catalog_models.Category.objects.create(label="Cookies")
+        catalog_models.Category.objects.filter(pk=category.pk).update(logo="categories/test.webp")
+        product.category = category
+        product.save()
+
+        response = api_client.get(f"/api/store-mgmt/products/{product.slug}/")
+
+        assert response.status_code == 200
+        assert response.data["category"]["logo"].startswith("http://testserver/media/")
 
     @pytest.mark.django_db
     def test_product_detail_with_auth_shows_sensitive_fields(self, auth_client, product):

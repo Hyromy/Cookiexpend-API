@@ -212,7 +212,11 @@ class ProductSerializer(PublicMixin, serializers.ModelSerializer):
     def to_representation(self, instance):
         res = super().to_representation(instance)
         if "category" in res:
-            res["category"] = CategorySerializer(instance.category).data if instance.category_id else None
+            res["category"] = (
+                CategorySerializer(instance.category, context=self.context).data
+                if instance.category_id
+                else None
+            )
         if "presentation" in res:
             res["presentation"] = (
                 PresentationSerializer(instance.presentation).data if instance.presentation_id else None
