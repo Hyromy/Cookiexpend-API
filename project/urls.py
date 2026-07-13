@@ -10,7 +10,7 @@ from apps.store_mgmt import urls as store_mgmt_urls
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("auth/", include(auth_urls)),
-    path("api/", include(catalog_urls)),
+    path("api/catalog/", include(catalog_urls)),
     path("api/store-mgmt/", include(store_mgmt_urls)),
 ]
 urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

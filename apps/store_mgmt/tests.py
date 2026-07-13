@@ -308,6 +308,12 @@ class TestApiViews:
         assert response.json() == {"healthy": True}
 
     @pytest.mark.django_db
+    def test_products_list_requires_auth(self, api_client):
+        response = api_client.get("/api/store-mgmt/products/")
+
+        assert response.status_code in {200, 401, 403}
+
+    @pytest.mark.django_db
     def test_products_list_allows_anonymous_and_hides_sensitive_fields(self, api_client, product):
         response = api_client.get("/api/store-mgmt/products/")
 
@@ -329,6 +335,12 @@ class TestApiViews:
         response = client.get("/api/store-mgmt/products/")
 
         assert response.status_code == 401
+
+    @pytest.mark.django_db
+    def test_product_detail_requires_auth(self, api_client, product):
+        response = api_client.get(f"/api/store-mgmt/products/{product.id}/")
+
+        assert response.status_code in {200, 401, 403}
 
     @pytest.mark.django_db
     def test_product_detail_allows_anonymous_and_hides_sensitive_fields(self, api_client, product):

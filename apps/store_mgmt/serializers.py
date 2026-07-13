@@ -184,19 +184,19 @@ class StoreSerializer(NestedMixin, serializers.ModelSerializer):
         return self.update_nested(instance, validated_data)
 
 
-class VarianteSerializer(serializers.ModelSerializer):
+class VariantSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.Product
         fields = ["id", "slug", "name"]
 
 
 class ProductSerializer(PublicMixin, serializers.ModelSerializer):
-    public_fields = {"name", "slug", "description", "badge", "img", "category", "presentation", "variantes"}
+    public_fields = {"name", "slug", "description", "badge", "img", "category", "presentation", "variants"}
 
     class Meta:
         model = models.Product
         fields = auditory_fields(
-            "sku", "name", "slug", "description", "badge", "price", "img", "category", "presentation", "variantes"
+            "sku", "name", "slug", "description", "badge", "price", "img", "category", "presentation", "variants"
         )
         read_only_fields = auditory_fields()
 
@@ -217,8 +217,8 @@ class ProductSerializer(PublicMixin, serializers.ModelSerializer):
             res["presentation"] = (
                 PresentationSerializer(instance.presentation).data if instance.presentation_id else None
             )
-        if "variantes" in res:
-            res["variantes"] = VarianteSerializer(instance.variantes.all(), many=True).data
+        if "variants" in res:
+            res["variants"] = VariantSerializer(instance.variants.all(), many=True).data
         return res
 
     def validate_name(self, value: str) -> str:

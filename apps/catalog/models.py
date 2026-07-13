@@ -19,6 +19,17 @@ class Category(BaseModel):
     def __str__(self):
         return self.label
 
+    def save(self, *args, **kwargs):
+        ImgHelper.save(
+            model=self,
+            field_name="logo",
+            methods=[
+                ImgHelper.Method.crop_to_square,
+                lambda img: ImgHelper.Method.scale(img, size=(512, 512)),
+            ],
+        )
+        super().save(*args, **kwargs)
+
 
 class Presentation(BaseModel):
     label = models.CharField(max_length=100)
@@ -33,13 +44,23 @@ class Presentation(BaseModel):
         return self.label
 
 
-class GaleriaItem(BaseModel):
-    url = models.ImageField(upload_to=ImgHelper.generate_path_in("galeria"))
+class GalleryItem(BaseModel):
+    url = models.ImageField(upload_to=ImgHelper.generate_path_in("gallery"))
     alt = models.CharField(max_length=200, blank=True, default="")
     order = models.PositiveSmallIntegerField(default=0)
 
     class Meta(BaseModel.Meta):
         ordering = ["order"]
+
+    def save(self, *args, **kwargs):
+        ImgHelper.save(
+            model=self,
+            field_name="url",
+            methods=[
+                lambda img: ImgHelper.Method.scale(img, size=(1920, 1920)),
+            ],
+        )
+        super().save(*args, **kwargs)
 
 
 class FAQ(BaseModel):
@@ -83,6 +104,17 @@ class Brand(BaseModel):
     def __str__(self):
         return self.name
 
+    def save(self, *args, **kwargs):
+        ImgHelper.save(
+            model=self,
+            field_name="logo",
+            methods=[
+                ImgHelper.Method.crop_to_square,
+                lambda img: ImgHelper.Method.scale(img, size=(512, 512)),
+            ],
+        )
+        super().save(*args, **kwargs)
+
 
 class Retailer(BaseModel):
     name = models.CharField(max_length=200)
@@ -94,9 +126,23 @@ class Retailer(BaseModel):
     brand = models.ForeignKey(
         Brand, on_delete=models.SET_NULL, null=True, blank=True, related_name="retailers"
     )
+    logo = models.ImageField(
+        upload_to=ImgHelper.generate_path_in("retailers"), blank=True, null=True
+    )
 
     class Meta(BaseModel.Meta):
         ordering = ["state", "municipality"]
 
     def __str__(self):
         return self.name
+
+    def save(self, *args, **kwargs):
+        ImgHelper.save(
+            model=self,
+            field_name="logo",
+            methods=[
+                ImgHelper.Method.crop_to_square,
+                lambda img: ImgHelper.Method.scale(img, size=(512, 512)),
+            ],
+        )
+        super().save(*args, **kwargs)

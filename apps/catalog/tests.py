@@ -26,7 +26,7 @@ class TestDepartmentContact:
     def test_contact_sends_email_to_department(self, api_client, department, subject):
         with patch("apps.catalog.views.send_mail") as send_mail_mock:
             response = api_client.post(
-                f"/api/departments/{department.id}/contact/",
+                f"/api/catalog/departments/{department.id}/contact/",
                 {
                     "name": "Jane Doe",
                     "email": "jane@example.com",
@@ -49,7 +49,7 @@ class TestDepartmentContact:
     def test_contact_allows_missing_phone_and_city(self, api_client, department, subject):
         with patch("apps.catalog.views.send_mail") as send_mail_mock:
             response = api_client.post(
-                f"/api/departments/{department.id}/contact/",
+                f"/api/catalog/departments/{department.id}/contact/",
                 {
                     "name": "Jane Doe",
                     "email": "jane@example.com",
@@ -67,7 +67,7 @@ class TestDepartmentContact:
         other_department = models.Department.objects.create(name="Support", email="support@example.com")
 
         response = api_client.post(
-            f"/api/departments/{other_department.id}/contact/",
+            f"/api/catalog/departments/{other_department.id}/contact/",
             {
                 "name": "Jane Doe",
                 "email": "jane@example.com",
@@ -84,7 +84,7 @@ class TestDepartmentContact:
         subject.department.save()
 
         response = api_client.post(
-            f"/api/departments/{subject.department.id}/contact/",
+            f"/api/catalog/departments/{subject.department.id}/contact/",
             {
                 "name": "Jane Doe",
                 "email": "jane@example.com",
@@ -96,7 +96,7 @@ class TestDepartmentContact:
         assert response.status_code == 503
 
     def test_contact_validates_required_fields(self, api_client, department):
-        response = api_client.post(f"/api/departments/{department.id}/contact/", {})
+        response = api_client.post(f"/api/catalog/departments/{department.id}/contact/", {})
 
         assert response.status_code == 400
         assert "name" in response.data
@@ -105,7 +105,7 @@ class TestDepartmentContact:
         assert "message" in response.data
 
     def test_department_list_does_not_expose_email(self, api_client, department):
-        response = api_client.get("/api/departments/")
+        response = api_client.get("/api/catalog/departments/")
 
         assert response.status_code == 200
         assert "email" not in response.data[0]

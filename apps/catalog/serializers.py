@@ -15,9 +15,9 @@ class PresentationSerializer(serializers.ModelSerializer):
         fields = ["id", "label", "order"]
 
 
-class GaleriaItemSerializer(serializers.ModelSerializer):
+class GalleryItemSerializer(serializers.ModelSerializer):
     class Meta:
-        model = models.GaleriaItem
+        model = models.GalleryItem
         fields = ["id", "url", "alt", "order"]
 
 
@@ -51,10 +51,11 @@ class BrandSerializer(serializers.ModelSerializer):
 
 class RetailerSerializer(serializers.ModelSerializer):
     brand = BrandSerializer(read_only=True)
+    logo_url = serializers.ImageField(source="logo", read_only=True)
 
     class Meta:
         model = models.Retailer
-        fields = ["id", "name", "address", "state", "municipality", "lat", "lng", "brand"]
+        fields = ["id", "name", "address", "state", "municipality", "lat", "lng", "brand", "logo_url"]
 
 
 class ContactMessageSerializer(serializers.Serializer):

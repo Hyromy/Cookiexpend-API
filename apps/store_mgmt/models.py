@@ -73,7 +73,7 @@ class Product(BaseModel):
     presentation = models.ForeignKey(
         "catalog.Presentation", on_delete=models.SET_NULL, null=True, blank=True
     )
-    variantes = models.ManyToManyField("self", blank=True, symmetrical=True)
+    variants = models.ManyToManyField("self", blank=True, symmetrical=True)
 
     class Meta(BaseModel.Meta):
         constraints = [

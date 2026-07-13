@@ -19,9 +19,9 @@ class PresentationViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [AllowAny]
 
 
-class GaleriaViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = models.GaleriaItem.objects.all()
-    serializer_class = serializers.GaleriaItemSerializer
+class GalleryViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = models.GalleryItem.objects.all()
+    serializer_class = serializers.GalleryItemSerializer
     permission_classes = [AllowAny]
 
 

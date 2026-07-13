@@ -87,8 +87,5 @@ Desktop.ini
 # ruff
 .ruff_cache/
 
-# media files
-media/
-
-# local-only catalog CSV import command
-apps/catalog/management/
+# local-only catalog CSV import data
+apps/catalog/management/data/
