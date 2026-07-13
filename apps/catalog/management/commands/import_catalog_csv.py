@@ -173,8 +173,8 @@ class Command(BaseCommand):
 
             try:
                 variant_skus = json.loads(variantes_raw)
-            except json.JSONDecodeError:
-                raise CommandError(f"[{sku}] invalid variantes JSON: {variantes_raw!r}")
+            except json.JSONDecodeError as err:
+                raise CommandError(f"[{sku}] invalid variantes JSON: {variantes_raw!r}") from err
 
             for variant_sku in variant_skus:
                 variant = products_by_sku.get(variant_sku)

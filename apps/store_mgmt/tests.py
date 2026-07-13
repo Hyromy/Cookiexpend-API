@@ -9,6 +9,7 @@ from django.contrib.messages.storage.fallback import FallbackStorage
 from django.contrib.sessions.middleware import SessionMiddleware
 from django.test import RequestFactory
 from rest_framework.test import APIClient
+
 from apps.catalog import models as catalog_models
 
 from . import models
