@@ -69,6 +69,16 @@ class BaseModel(models.Model):
     class Meta:
         abstract = True
 
+    def delete_parent(self, model: "BaseModel", fk_field_name: str):
+        """Delete the parent object of this instance."""
+
+        BaseModel.delete(self)
+
+        related_id = getattr(self, fk_field_name)
+
+        if related_id:
+            model.all_objects.filter(pk=related_id).update(deleted_at=self.deleted_at)
+
     def delete(self, using=None, keep_parents=False):
         self.deleted_at = now()
         type(self).all_objects.filter(pk=self.pk).update(deleted_at=self.deleted_at)

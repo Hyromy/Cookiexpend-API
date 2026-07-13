@@ -45,6 +45,9 @@ class Factory(BaseModel):
     def __str__(self):
         return self.establishment.name
 
+    def delete(self, using=None, keep_parents=False):
+        self.delete_parent(Establishment, "establishment_id")
+
 
 class Store(BaseModel):
     establishment = models.OneToOneField(Establishment, on_delete=models.CASCADE)
@@ -56,6 +59,9 @@ class Store(BaseModel):
 
     def __str__(self):
         return self.establishment.name
+
+    def delete(self, using=None, keep_parents=False):
+        self.delete_parent(Establishment, "establishment_id")
 
 
 class Product(BaseModel):
