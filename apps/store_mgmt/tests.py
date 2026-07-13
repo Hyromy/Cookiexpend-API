@@ -10,6 +10,8 @@ from django.contrib.sessions.middleware import SessionMiddleware
 from django.test import RequestFactory
 from rest_framework.test import APIClient
 
+from apps.catalog import models as catalog_models
+
 from . import models
 from .admin import ProductAdmin
 from .models import Product
@@ -314,6 +316,14 @@ class TestApiViews:
         assert response.status_code in {200, 401, 403}
 
     @pytest.mark.django_db
+    def test_products_list_allows_anonymous_and_hides_sensitive_fields(self, api_client, product):
+        response = api_client.get("/api/store-mgmt/products/")
+
+        assert response.status_code == 200
+        assert "sku" not in response.data[0]
+        assert "price" not in response.data[0]
+
+    @pytest.mark.django_db
     def test_products_list_with_jwt(self, jwt_client):
         response = jwt_client.get("/api/store-mgmt/products/")
 
@@ -333,6 +343,34 @@ class TestApiViews:
         response = api_client.get(f"/api/store-mgmt/products/{product.id}/")
 
         assert response.status_code in {200, 401, 403}
+
+    @pytest.mark.django_db
+    def test_product_detail_allows_anonymous_and_hides_sensitive_fields(self, api_client, product):
+        response = api_client.get(f"/api/store-mgmt/products/{product.id}/")
+
+        assert response.status_code == 200
+        assert "sku" not in response.data
+        assert "price" not in response.data
+
+    @pytest.mark.django_db
+    def test_product_detail_category_logo_is_absolute_url(self, api_client, product):
+        category = catalog_models.Category.objects.create(label="Cookies")
+        catalog_models.Category.objects.filter(pk=category.pk).update(logo="categories/test.webp")
+        product.category = category
+        product.save()
+
+        response = api_client.get(f"/api/store-mgmt/products/{product.slug}/")
+
+        assert response.status_code == 200
+        assert response.data["category"]["logo"].startswith("http://testserver/media/")
+
+    @pytest.mark.django_db
+    def test_product_detail_with_auth_shows_sensitive_fields(self, auth_client, product):
+        response = auth_client.get(f"/api/store-mgmt/products/{product.id}/")
+
+        assert response.status_code == 200
+        assert response.data["sku"] == str(product.sku)
+        assert "price" in response.data
 
     @pytest.mark.django_db
     def test_product_update_requires_auth(self, api_client, product):
