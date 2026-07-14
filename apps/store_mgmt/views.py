@@ -10,16 +10,14 @@ from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
-from apps._api.gossiper import (
-    publish_handler,
-    redis_client,
-)
+import apps._redis as redis_infra
 from apps._api.mixins import MixinViewSet
 from apps._api.views import api_health_check
 from apps._auth.permissions import (
     any_of,
     permission,
 )
+from apps._redis.gossiper import publish_handler
 
 from . import models, serializers
 
@@ -245,7 +243,7 @@ def events(request):
     """Endpoint for streaming guild update events. Clients can connect to this endpoint to receive real-time updates."""
 
     def event_stream():
-        pubsub = redis_client.pubsub()
+        pubsub = redis_infra.redis_client.pubsub()
         pubsub.psubscribe("*")
 
         try:

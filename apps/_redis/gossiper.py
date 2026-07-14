@@ -2,9 +2,7 @@ from json import dumps as json_dumps
 from logging import getLogger
 from typing import Literal
 
-from redis import from_url as redis_from_url
-
-from project.config import config
+import apps._redis as redis_infra
 
 MODEL = Literal[
     "product",
@@ -29,7 +27,6 @@ EVENT = Literal[
 ]
 EVENT_VALUES = EVENT.__args__
 
-redis_client = redis_from_url(config.REDIS_URL)
 
 logger = getLogger(__name__)
 
@@ -53,7 +50,7 @@ def publish_on_redis(channel: str, payload: dict):
     """Publish a message on Redis. The payload is serialized to JSON before publishing."""
 
     try:
-        redis_client.publish(channel, json_dumps(payload))
+        redis_infra.redis_client.publish(channel, json_dumps(payload))
     except Exception as e:
         logger.error("Failed to publish on Redis", exc_info=e)
 

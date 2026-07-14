@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     "apps._api",
     "apps._auth",
     "apps._mail",
+    "apps._redis",
     "apps.store_mgmt",
 ]
 
