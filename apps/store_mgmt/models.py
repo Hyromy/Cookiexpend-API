@@ -1,6 +1,7 @@
 from django.contrib.auth.models import User
 from django.db import models
 from django.utils import timezone
+from django.utils.text import slugify
 
 from apps._api.models import BaseModel, money, unique_active_constraint
 from project.utils import ImgHelper
@@ -65,21 +66,35 @@ class Store(BaseModel):
 
 
 class Product(BaseModel):
-    sku = models.BigIntegerField()
+    sku = models.CharField(max_length=18)
     name = models.CharField(max_length=255)
+    slug = models.SlugField(blank=True)
+    description = models.TextField(blank=True, default="", max_length=500)
+    badge = models.CharField(max_length=50, blank=True, default="")
     price = money()
     img = models.ImageField(upload_to=ImgHelper.generate_path_in("products"), blank=True, null=True)
+    category = models.ForeignKey(
+        "catalog.Category", on_delete=models.SET_NULL, null=True, blank=True
+    )
+    presentation = models.ForeignKey(
+        "catalog.Presentation", on_delete=models.SET_NULL, null=True, blank=True
+    )
+    variants = models.ManyToManyField("self", blank=True, symmetrical=True)
 
     class Meta(BaseModel.Meta):
         constraints = [
             unique_active_constraint("product", "name"),
             unique_active_constraint("product", "sku"),
+            unique_active_constraint("product", "slug"),
         ]
 
     def __str__(self):
         return f"{self.name} - ${self.price}"
 
     def save(self, *args, **kwargs):
+        if not self.slug:
+            self.slug = f"{slugify(self.name)}-{self.sku}"
+
         ImgHelper.save(
             model=self,
             methods=[

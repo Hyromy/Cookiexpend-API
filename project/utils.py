@@ -16,7 +16,7 @@ class ImgHelper:
     and normalizing images, as well as generating unique paths for uploaded images.
     """
 
-    FOLDER = Literal["products"]
+    FOLDER = Literal["products", "categories", "gallery", "brands", "retailers"]
     SIZE = Tuple[int, int]
 
     class Method:

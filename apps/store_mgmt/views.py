@@ -5,21 +5,20 @@ from typing import Literal
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
 from django.http import StreamingHttpResponse
+from django.shortcuts import get_object_or_404
 from django.views.decorators.http import require_GET
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
-from apps._api.gossiper import (
-    publish_handler,
-    redis_client,
-)
+import apps._redis as redis_infra
 from apps._api.mixins import MixinViewSet
 from apps._api.views import api_health_check
 from apps._auth.permissions import (
     any_of,
     permission,
 )
+from apps._redis.gossiper import publish_handler
 
 from . import models, serializers
 
@@ -101,6 +100,17 @@ class ProductViewSet(MixinViewSet):
             permission(user=["Factory manager"], can=["see", "create", "update", "delete"]),
         )
     ]
+    def get_object(self):
+        """Look up the product by numeric pk or by slug, so detail URLs work both ways."""
+
+        queryset = self.filter_queryset(self.get_queryset())
+        lookup_value = self.kwargs[self.lookup_url_kwarg or self.lookup_field]
+
+        filter_kwargs = {"pk": lookup_value} if lookup_value.isdigit() else {"slug": lookup_value}
+        obj = get_object_or_404(queryset, **filter_kwargs)
+        self.check_object_permissions(self.request, obj)
+
+        return obj
 
 
 class StatusViewSet(MixinViewSet):
@@ -245,7 +255,7 @@ def events(request):
     """Endpoint for streaming guild update events. Clients can connect to this endpoint to receive real-time updates."""
 
     def event_stream():
-        pubsub = redis_client.pubsub()
+        pubsub = redis_infra.redis_client.pubsub()
         pubsub.psubscribe("*")
 
         try:
