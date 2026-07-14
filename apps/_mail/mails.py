@@ -28,7 +28,9 @@ def send_mail(
 ) -> None: ...
 
 
-def send_mail(*, template: str, ctx: dict, subject: str, to: list[str]):
+def send_mail(
+    *, template: str, ctx: dict, subject: str, to: list[str], reply_to: list[str] | None = None
+):
     """Send an email using a specified template, context, subject, and recipient list. The email is sent in both HTML and plain text formats."""
 
     ctx["current_year"] = now().year
@@ -40,6 +42,7 @@ def send_mail(*, template: str, ctx: dict, subject: str, to: list[str]):
         body=strip_tags(html_content),
         from_email=None,
         to=to,
+        reply_to=reply_to,
     )
     email.attach_alternative(html_content, "text/html")
 
