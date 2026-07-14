@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.utils.timezone import now
 
-from .gossiper import (
+from apps._redis.gossiper import (
     MODEL,
     publish_handler,
 )

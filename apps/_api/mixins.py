@@ -4,7 +4,8 @@ from django.db.models import QuerySet
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import viewsets
 
-from .gossiper import MODEL, publish_handler
+from apps._redis.gossiper import MODEL, publish_handler
+
 from .models import BaseModel
 
 

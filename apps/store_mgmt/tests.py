@@ -561,7 +561,7 @@ class TestApiViews:
         client = APIClient()
         client.force_login(user)
 
-        with patch("apps.store_mgmt.views.redis_client") as redis_mock:
+        with patch("apps.store_mgmt.views.redis_infra.redis_client") as redis_mock:
             redis_mock.pubsub.return_value = fake
             response = client.get("/api/store-mgmt/events/")
             chunks = []
@@ -601,7 +601,7 @@ class TestApiViews:
         client = APIClient()
         client.force_login(user)
 
-        with patch("apps.store_mgmt.views.redis_client") as redis_mock:
+        with patch("apps.store_mgmt.views.redis_infra.redis_client") as redis_mock:
             redis_mock.pubsub.return_value = fake
             response = client.get("/api/store-mgmt/events/")
             chunks = []
@@ -660,7 +660,7 @@ class TestSerializers:
         _create_inventory(store=store, product=product, quantity=5)
         _create_payment_method("cash")
 
-        with patch("apps._api.mixins.publish_handler"):
+        with patch("apps.store_mgmt.views.publish_handler"):
             response = client.post(
                 "/api/store-mgmt/sells/",
                 {
