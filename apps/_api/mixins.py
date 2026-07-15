@@ -21,6 +21,17 @@ class NestedMixin:
     nested_field: str
     nested_model: BaseModel
 
+    def run_validation(self, data=Any):
+        """Override the default validation to handle nested data."""
+
+        if self.instance and hasattr(self.instance, self.nested_field):
+            nested_instance = getattr(self.instance, self.nested_field)
+
+            if self.nested_field in self.fields:
+                self.fields[self.nested_field].instance = nested_instance
+
+        return super().run_validation(data)
+
     def create_nested(self, validated_data):
         """Create the nested model first, then the main model."""
 

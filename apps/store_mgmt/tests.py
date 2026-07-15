@@ -245,6 +245,7 @@ def _payload_for_endpoint(endpoint: str) -> dict:
         return {
             "store": store.id,
             "products": [{"product": product.id, "quantity": 1}],
+            "received": "5.00",
         }
     if endpoint == "payment-methods":
         return {"name": "cash_new"}
@@ -478,8 +479,8 @@ class TestApiViews:
             {"name": "cookie", "sku": 7773},
         )
 
-        assert response.status_code == 400
-        assert "price" in response.data
+        assert response.status_code == 201
+        assert response.data["price"] == "0.00"
 
     @pytest.mark.django_db
     def test_product_validation_blank_fields(self, auth_client):
@@ -666,6 +667,7 @@ class TestSerializers:
                 {
                     "store": store.id,
                     "products": [{"product": product.id, "quantity": 3}],
+                    "received": "15.00",
                 },
                 format="json",
             )
@@ -700,6 +702,7 @@ class TestSerializers:
             {
                 "store": store.id,
                 "products": [{"product": product.id, "quantity": 2}],
+                "received": "10.00",
             },
             format="json",
         )
@@ -729,8 +732,9 @@ class TestSerializers:
     def test_product_serializer_missing_fields(self):
         serializer = ProductSerializer(data={"name": "cookie", "sku": 5552})
 
-        assert serializer.is_valid() is False
-        assert "price" in serializer.errors
+        assert serializer.is_valid(), serializer.errors
+        product = serializer.save()
+        assert str(product.price) == "0.00"
 
     @pytest.mark.django_db
     def test_product_serializer_blank_fields(self):

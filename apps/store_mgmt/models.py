@@ -1,4 +1,7 @@
+from decimal import Decimal
+
 from django.contrib.auth.models import User
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
 from django.utils.text import slugify
@@ -46,6 +49,9 @@ class Factory(BaseModel):
     def __str__(self):
         return self.establishment.name
 
+    def delete(self, using=None, keep_parents=False):
+        self.delete_parent(Establishment, "establishment_id")
+
 
 class Store(BaseModel):
     establishment = models.OneToOneField(Establishment, on_delete=models.CASCADE)
@@ -57,6 +63,9 @@ class Store(BaseModel):
 
     def __str__(self):
         return self.establishment.name
+
+    def delete(self, using=None, keep_parents=False):
+        self.delete_parent(Establishment, "establishment_id")
 
 
 class Product(BaseModel):
@@ -142,11 +151,35 @@ class Sell(BaseModel):
     store = models.ForeignKey(Store, on_delete=models.CASCADE)
     date = models.DateTimeField(default=timezone.now)
     total = money()
+    received = money(min_value=Decimal("0.00"))
+    returned = money(min_value=Decimal("0.00"))
+    seller = models.ForeignKey(Profile, on_delete=models.SET_NULL, null=True)
+    seller_name = models.CharField(max_length=255, blank=True)
 
     class Meta(BaseModel.Meta):
         constraints = [
             unique_active_constraint("sell", "store", "date"),
         ]
+
+    def clean(self):
+        super().clean()
+        if self.received is not None and self.total is not None:
+            if self.received < self.total:
+                raise ValidationError(
+                    {"received": "Received amount cannot be less than the total amount."}
+                )
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+
+        if self.received is not None and self.total is not None:
+            self.returned = self.received - self.total
+
+        if not self.pk and self.seller:
+            if not self.seller_name:
+                self.seller_name = self.seller.user.get_full_name() or self.seller.user.username
+
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.id}: ${self.total}"
@@ -186,14 +219,25 @@ class SellDetail(BaseModel):
     sell = models.ForeignKey(Sell, on_delete=models.CASCADE)
     quantity = models.PositiveIntegerField()
     price = money()
+    product_name = models.CharField(max_length=255, blank=True, default="")
 
     class Meta(BaseModel.Meta):
         constraints = [
             unique_active_constraint("sell_detail", "sell", "product"),
         ]
 
+    def save(self, *args, **kwargs):
+        if not self.pk and self.product:
+            if not self.product_name:
+                self.product_name = self.product.name
+
+            if not self.price:
+                self.price = self.product.price
+
+        super().save(*args, **kwargs)
+
     def __str__(self):
-        return f"{self.sell.id} - {self.product} (${self.price}) x{self.quantity}"
+        return f"{self.sell.id} - {self.product_name} (${self.price}) x{self.quantity}"
 
 
 class Payment(BaseModel):

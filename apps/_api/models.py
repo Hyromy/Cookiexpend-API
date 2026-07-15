@@ -5,13 +5,21 @@ from django.db import models
 from django.utils.timezone import now
 
 
-def money(int_size: int = 4, decimal_places: int = 2, /):
+def money(
+    int_size: int = 4,
+    decimal_places: int = 2,
+    /,
+    *,
+    min_value: Decimal = Decimal("0.01"),
+    default: Decimal = Decimal("0.00"),
+):
     """Create a DecimalField for storing monetary values"""
 
     return models.DecimalField(
         max_digits=int_size + decimal_places,
         decimal_places=decimal_places,
-        validators=[MinValueValidator(Decimal("0.01"))],
+        validators=[MinValueValidator(min_value)],
+        default=default,
     )
 
 
@@ -68,6 +76,16 @@ class BaseModel(models.Model):
 
     class Meta:
         abstract = True
+
+    def delete_parent(self, model: "BaseModel", fk_field_name: str):
+        """Delete the parent object of this instance."""
+
+        BaseModel.delete(self)
+
+        related_id = getattr(self, fk_field_name)
+
+        if related_id:
+            model.all_objects.filter(pk=related_id).update(deleted_at=self.deleted_at)
 
     def delete(self, using=None, keep_parents=False):
         self.deleted_at = now()
