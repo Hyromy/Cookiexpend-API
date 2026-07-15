@@ -1,6 +1,6 @@
 [project]
 name = "cookiexpend-API"
-version = "0.5.1"
+version = "0.5.2"
 description = "Sistema de control y supervisión de inventarios en entornos distribuidos"
 authors = [
     {name = "Hyromy",email = "formulajoel9@gmail.com"}
