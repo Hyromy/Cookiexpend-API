@@ -191,12 +191,30 @@ class VariantSerializer(serializers.ModelSerializer):
 
 
 class ProductSerializer(PublicMixin, serializers.ModelSerializer):
-    public_fields = {"name", "slug", "description", "badge", "img", "category", "presentation", "variants"}
+    public_fields = {
+        "name",
+        "slug",
+        "description",
+        "badge",
+        "img",
+        "category",
+        "presentation",
+        "variants",
+    }
 
     class Meta:
         model = models.Product
         fields = auditory_fields(
-            "sku", "name", "slug", "description", "badge", "price", "img", "category", "presentation", "variants"
+            "sku",
+            "name",
+            "slug",
+            "description",
+            "badge",
+            "price",
+            "img",
+            "category",
+            "presentation",
+            "variants",
         )
         read_only_fields = auditory_fields()
 
@@ -219,7 +237,9 @@ class ProductSerializer(PublicMixin, serializers.ModelSerializer):
             )
         if "presentation" in res:
             res["presentation"] = (
-                PresentationSerializer(instance.presentation).data if instance.presentation_id else None
+                PresentationSerializer(instance.presentation).data
+                if instance.presentation_id
+                else None
             )
         if "variants" in res:
             res["variants"] = VariantSerializer(instance.variants.all(), many=True).data
@@ -367,8 +387,17 @@ class SellSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = models.Sell
-        fields = auditory_fields("store", "date", "total", "products")
-        read_only_fields = auditory_fields("store", "total")
+        fields = auditory_fields(
+            "store",
+            "date",
+            "total",
+            "received",
+            "returned",
+            "seller",
+            "seller_name",
+            "products",
+        )
+        read_only_fields = auditory_fields("store", "total", "returned", "seller", "seller_name")
 
     def validate_products(self, value):
         if self.instance is not None:
@@ -401,6 +430,27 @@ class SellSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError("Product quantity must be greater than 0.")
 
         return value
+
+    def validate(self, attrs):
+        products_data = attrs.get("products", [])
+        if products_data:
+            product_ids = [item["product"] for item in products_data]
+            products_by_id = models.Product.objects.in_bulk(product_ids)
+
+            total_temporal = Decimal("0.00")
+            for item in products_data:
+                p = products_by_id.get(item["product"])
+                if p:
+                    total_temporal += p.price * int(item["quantity"])
+
+            received = attrs.get("received", Decimal("0.00"))
+            if received < total_temporal:
+                raise serializers.ValidationError(
+                    {
+                        "received": f"Received amount ({received}) cannot be less than the total amount of products ({total_temporal})."
+                    }
+                )
+        return attrs
 
     def _extract_from_inventory(self, store, products_data, products_by_id):
         product_ids = [item["product"] for item in products_data]
@@ -452,11 +502,18 @@ class SellSerializer(serializers.ModelSerializer):
             quantity = int(item["quantity"])
             total += product.price * quantity
 
-        sell = models.Sell.objects.create(total=total, **validated_data)
+        validated_data["total"] = total
+
+        received = validated_data.get("received", Decimal("0.00"))
+        validated_data["returned"] = received - total
+
+        sell = models.Sell.objects.create(**validated_data)
+
         details = [
             models.SellDetail(
                 sell=sell,
                 product=products_by_id[item["product"]],
+                product_name=products_by_id[item["product"]].name,
                 quantity=int(item["quantity"]),
                 price=products_by_id[item["product"]].price,
             )
@@ -473,7 +530,7 @@ class SellSerializer(serializers.ModelSerializer):
         models.Payment.objects.create(
             sell=sell,
             payment_method=payment_method,
-            amount=total,
+            amount=received,
         )
 
         return sell
@@ -483,7 +540,9 @@ class SellSerializer(serializers.ModelSerializer):
         request = self.context.get("request")
         _check_profile(request)
 
-        validated_data["store"] = request.user.profile.establishment.store
+        profile = request.user.profile
+        validated_data["store"] = profile.establishment.store
+        validated_data["seller"] = profile
 
         products_data = validated_data.pop("products", None)
         if not products_data:
@@ -505,12 +564,15 @@ class SellSerializer(serializers.ModelSerializer):
     def to_representation(self, instance):
         res = super().to_representation(instance)
         res["store"] = StoreSerializer(instance.store).data
+        if instance.seller:
+            res["seller"] = {"id": instance.seller.id, "name": instance.seller_name}
         res["details"] = [
             SellDetailNestedSerializer(item).data for item in instance.selldetail_set.all()
         ]
         res["payments"] = [
             PaymentNestedSerializer(item).data for item in instance.payment_set.all()
         ]
+
         return res
 
 
@@ -527,12 +589,13 @@ class PaymentMethodSerializer(serializers.ModelSerializer):
 class SellDetailNestedSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.SellDetail
-        fields = auditory_fields("product", "quantity", "price")
+        fields = auditory_fields("product", "product_name", "quantity", "price")
         read_only_fields = auditory_fields()
 
     def to_representation(self, instance):
         res = super().to_representation(instance)
         res["product"] = ProductSerializer(instance.product).data
+
         return res
 
 
@@ -545,19 +608,21 @@ class PaymentNestedSerializer(serializers.ModelSerializer):
     def to_representation(self, instance):
         res = super().to_representation(instance)
         res["payment_method"] = PaymentMethodSerializer(instance.payment_method).data
+
         return res
 
 
 class SellDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.SellDetail
-        fields = auditory_fields("sell", "product", "quantity", "price")
+        fields = auditory_fields("sell", "product", "product_name", "quantity", "price")
         read_only_fields = auditory_fields()
 
     def to_representation(self, instance):
         res = super().to_representation(instance)
         res["sell"] = SellSerializer(instance.sell).data
         res["product"] = ProductSerializer(instance.product).data
+
         return res
 
 

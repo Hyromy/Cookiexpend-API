@@ -5,13 +5,21 @@ from django.db import models
 from django.utils.timezone import now
 
 
-def money(int_size: int = 4, decimal_places: int = 2, /):
+def money(
+    int_size: int = 4,
+    decimal_places: int = 2,
+    /,
+    *,
+    min_value: Decimal = Decimal("0.01"),
+    default: Decimal = Decimal("0.00"),
+):
     """Create a DecimalField for storing monetary values"""
 
     return models.DecimalField(
         max_digits=int_size + decimal_places,
         decimal_places=decimal_places,
-        validators=[MinValueValidator(Decimal("0.01"))],
+        validators=[MinValueValidator(min_value)],
+        default=default,
     )
 
 
