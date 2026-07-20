@@ -190,7 +190,16 @@ class VariantSerializer(serializers.ModelSerializer):
         fields = ["id", "slug", "name"]
 
 
+class ProductImageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = models.ProductImage
+        fields = auditory_fields("product", "img", "order")
+        read_only_fields = auditory_fields()
+
+
 class ProductSerializer(PublicMixin, serializers.ModelSerializer):
+    images = serializers.SerializerMethodField()
+
     public_fields = {
         "name",
         "slug",
@@ -200,6 +209,7 @@ class ProductSerializer(PublicMixin, serializers.ModelSerializer):
         "category",
         "presentation",
         "variants",
+        "images",
     }
 
     class Meta:
@@ -215,8 +225,11 @@ class ProductSerializer(PublicMixin, serializers.ModelSerializer):
             "category",
             "presentation",
             "variants",
-        )
-        read_only_fields = auditory_fields()
+        ) + ["images"]
+        read_only_fields = auditory_fields() + ["images"]
+
+    def get_images(self, instance) -> list:
+        return ProductImageSerializer(instance.images.all(), many=True, context=self.context).data
 
     def to_internal_value(self, data):
         if hasattr(data, "_mutable"):

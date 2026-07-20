@@ -50,6 +50,15 @@ class ProductAdmin(AdminPanel, admin.ModelAdmin):
     search_fields = ("sku", "name", "price")
 
 
+@admin.register(models.ProductImage)
+class ProductImageAdmin(AdminPanel, admin.ModelAdmin):
+    model_name = "product_image"
+    model_class = models.ProductImage
+    serializer_class = serializers.ProductImageSerializer
+
+    search_fields = ("product__sku", "product__name")
+
+
 @admin.register(models.Status)
 class StatusAdmin(AdminPanel, admin.ModelAdmin):
     model_name = "status"

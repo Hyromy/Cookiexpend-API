@@ -1,4 +1,5 @@
 import random
+from io import BytesIO
 from unittest.mock import patch
 
 import pytest
@@ -7,7 +8,9 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.contrib.messages.storage.fallback import FallbackStorage
 from django.contrib.sessions.middleware import SessionMiddleware
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import RequestFactory
+from PIL import Image
 from rest_framework.test import APIClient
 
 from apps.catalog import models as catalog_models
@@ -137,6 +140,13 @@ def _create_product(name="cookie", sku=None):
     if sku is None:
         sku = random.randint(1, 999999)
     return models.Product.objects.create(name=name, price="5.00", sku=sku)
+
+
+def _make_uploaded_image(name="test.png"):
+    buffer = BytesIO()
+    Image.new("RGB", (10, 10), color=(0, 128, 255)).save(buffer, "PNG")
+    buffer.seek(0)
+    return SimpleUploadedFile(name, buffer.read(), content_type="image/png")
 
 
 def _create_factory(establishment=None):
@@ -364,6 +374,86 @@ class TestApiViews:
 
         assert response.status_code == 200
         assert response.data["category"]["logo"].startswith("http://testserver/media/")
+
+    @pytest.mark.django_db
+    def test_product_detail_includes_empty_images_list(self, api_client, product):
+        response = api_client.get(f"/api/store-mgmt/products/{product.slug}/")
+
+        assert response.status_code == 200
+        assert response.data["images"] == []
+
+    @pytest.mark.django_db
+    def test_product_image_create_requires_auth(self, api_client, product):
+        response = api_client.post(
+            "/api/store-mgmt/product-images/",
+            {"product": product.id, "img": _make_uploaded_image()},
+        )
+
+        assert response.status_code in {401, 403}
+
+    @pytest.mark.django_db
+    def test_product_image_create_and_appears_on_product(self, auth_client, product):
+        with patch("apps._api.mixins.publish_handler"):
+            response = auth_client.post(
+                "/api/store-mgmt/product-images/",
+                {"product": product.id, "img": _make_uploaded_image(), "order": 1},
+            )
+
+        assert response.status_code == 201
+        assert response.data["img"].endswith(".webp")
+        assert models.ProductImage.objects.filter(product=product).count() == 1
+
+        product_response = auth_client.get(f"/api/store-mgmt/products/{product.slug}/")
+        assert len(product_response.data["images"]) == 1
+        assert product_response.data["images"][0]["order"] == 1
+
+    @pytest.mark.django_db
+    def test_product_image_list_filters_by_product(self, auth_client, product):
+        other_product = _create_product(name="cake")
+
+        with patch("apps._api.mixins.publish_handler"):
+            auth_client.post(
+                "/api/store-mgmt/product-images/",
+                {"product": product.id, "img": _make_uploaded_image()},
+            )
+            auth_client.post(
+                "/api/store-mgmt/product-images/",
+                {"product": other_product.id, "img": _make_uploaded_image()},
+            )
+
+        response = auth_client.get(f"/api/store-mgmt/product-images/?product={product.id}")
+
+        assert response.status_code == 200
+        assert len(response.data) == 1
+        assert response.data[0]["product"] == product.id
+
+    @pytest.mark.django_db
+    def test_product_image_delete_requires_auth(self, api_client, product):
+        image = models.ProductImage.objects.create(product=product, img=_make_uploaded_image())
+
+        response = api_client.delete(f"/api/store-mgmt/product-images/{image.id}/")
+
+        assert response.status_code in {401, 403}
+
+    @pytest.mark.django_db
+    def test_product_image_delete(self, auth_client, product):
+        image = models.ProductImage.objects.create(product=product, img=_make_uploaded_image())
+
+        with patch("apps._api.mixins.publish_handler"):
+            response = auth_client.delete(f"/api/store-mgmt/product-images/{image.id}/")
+
+        assert response.status_code == 204
+        assert not models.ProductImage.objects.filter(pk=image.pk).exists()
+
+    @pytest.mark.django_db
+    def test_product_image_url_is_absolute(self, api_client, product):
+        image = models.ProductImage.objects.create(product=product, img=_make_uploaded_image())
+        models.ProductImage.objects.filter(pk=image.pk).update(img="products/test.webp")
+
+        response = api_client.get(f"/api/store-mgmt/products/{product.slug}/")
+
+        assert response.status_code == 200
+        assert response.data["images"][0]["img"].startswith("http://testserver/media/")
 
     @pytest.mark.django_db
     def test_product_detail_with_auth_shows_sensitive_fields(self, auth_client, product):

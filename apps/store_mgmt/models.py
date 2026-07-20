@@ -108,6 +108,28 @@ class Product(BaseModel):
         super().save(*args, **kwargs)
 
 
+class ProductImage(BaseModel):
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="images")
+    img = models.ImageField(upload_to=ImgHelper.generate_path_in("products"))
+    order = models.PositiveSmallIntegerField(default=0)
+
+    class Meta(BaseModel.Meta):
+        ordering = ["order", "id"]
+
+    def __str__(self):
+        return f"{self.product.name} - image #{self.order}"
+
+    def save(self, *args, **kwargs):
+        ImgHelper.save(
+            model=self,
+            methods=[
+                ImgHelper.Method.crop_to_square,
+                lambda img: ImgHelper.Method.scale(img, size=(1024, 1024)),
+            ],
+        )
+        super().save(*args, **kwargs)
+
+
 class Status(BaseModel):
     name = models.CharField(max_length=32)
     description = models.TextField(blank=True, default="", max_length=255)

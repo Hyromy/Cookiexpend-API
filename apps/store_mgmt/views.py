@@ -113,6 +113,19 @@ class ProductViewSet(MixinViewSet):
         return obj
 
 
+class ProductImageViewSet(MixinViewSet):
+    model_name = "product_image"
+    queryset = models.ProductImage.objects.all()
+    serializer_class = serializers.ProductImageSerializer
+    filterset_fields = ["product"]
+    permission_classes = [
+        any_of(
+            permission(user=["Store manager", "Public"], can=["see"]),
+            permission(user=["Factory manager"], can=["see", "create", "update", "delete"]),
+        )
+    ]
+
+
 class StatusViewSet(MixinViewSet):
     model_name = "status"
     queryset = models.Status.objects.all()
