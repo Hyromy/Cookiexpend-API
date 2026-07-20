@@ -18,6 +18,12 @@ Secret de seguridad para protecciones y criptografía del proyecto. Se recomiend
 
 _Por defecto, se establece una secret insegura_.
 
+### `PRE_PRODUCTION`
+
+Permite el trafico de cookies y sesiones mediante HTTP en `PRODUCTION=TRUE`.
+
+_Por defecto, toma el valor de `False`_.
+
 ## Red y seguridad
 
 ### `HOSTS`

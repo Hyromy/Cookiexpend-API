@@ -49,6 +49,7 @@ class Config(BaseSettings):
 
     # --- General settings ---
     PRODUCTION: bool = False
+    PRE_PRODUCTION: bool = False
     DJANGO_SECRET_KEY: str = Field(default="insecure-secret-key")
     USE_SSL: bool = False
 
