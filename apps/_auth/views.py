@@ -1,9 +1,18 @@
+from logging import getLogger
+from uuid import uuid4
+
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.models import User
 from django.http import HttpRequest
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+
+from apps._mail.mails import send_mail
+from apps._redis.cache import delete_from_cache, get_from_cache, set_in_cache
+from project.config import config
+
+logger = getLogger(__name__)
 
 
 def user_to_dict(user: User) -> dict:
@@ -82,3 +91,70 @@ def auth_login(request: HttpRequest) -> Response:
         return Response({"success": True}, status=200)
 
     return Response({"success": False, "message": "Invalid credentials"}, status=401)
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def reset_password_request(request: HttpRequest) -> Response:
+    email = request.data.get("email")
+
+    if not email:
+        return Response({"success": False, "message": "Email is required"}, status=400)
+
+    user = User.objects.filter(email=email).first()
+
+    if user:
+        token = str(uuid4())
+        minutes = 15
+        set_in_cache(f"reset_password_token:{token}", user.id, ttl=60 * minutes)
+
+        redirect_path = "restablecer-acceso"
+        try:
+            send_mail(
+                template="reset_password_request.html",
+                ctx={
+                    "expire_in": f"{minutes} minutos",
+                    "token": token,
+                    "redirect_url": config.DEFAULT_FRONTEND + f"/{redirect_path}?token={token}",
+                },
+                subject="Solicitud de restablecimiento de contraseña",
+                to=[email],
+            )
+        except Exception as e:
+            logger.error(f"Failed to send reset password email to {email}", exc_info=e)
+
+    return Response(
+        {"success": True, "message": "If the email exists, a reset link has been sent."}, status=200
+    )
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def reset_password_confirm(request: HttpRequest) -> Response:
+    token = request.data.get("token")
+    password = request.data.get("password")
+
+    if not token or not password:
+        return Response(
+            {"success": False, "message": "Token and password are required"}, status=400
+        )
+
+    user_id = get_from_cache(f"reset_password_token:{token}")
+
+    if not user_id:
+        return Response({"success": False, "message": "Invalid or expired token"}, status=400)
+
+    try:
+        user = User.objects.get(id=int(user_id))
+
+        user.set_password(password)
+        user.save()
+
+    except User.DoesNotExist:
+        return Response({"success": False, "message": "User not found"}, status=404)
+
+    else:
+        delete_from_cache(f"reset_password_token:{token}")
+        return Response(
+            {"success": True, "message": "Password has been reset successfully"}, status=200
+        )
