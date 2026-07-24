@@ -75,7 +75,6 @@ class Product(BaseModel):
     description = models.TextField(blank=True, default="", max_length=500)
     badge = models.CharField(max_length=50, blank=True, default="")
     price = money()
-    img = models.ImageField(upload_to=ImgHelper.generate_path_in("products"), blank=True, null=True)
     category = models.ForeignKey(
         "catalog.Category", on_delete=models.SET_NULL, null=True, blank=True
     )
@@ -98,13 +97,6 @@ class Product(BaseModel):
         if not self.slug:
             self.slug = f"{slugify(self.name)}-{self.sku}"
 
-        ImgHelper.save(
-            model=self,
-            methods=[
-                ImgHelper.Method.crop_to_square,
-                lambda img: ImgHelper.Method.scale(img, size=(1024, 1024)),
-            ],
-        )
         super().save(*args, **kwargs)
 
 

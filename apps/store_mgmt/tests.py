@@ -61,6 +61,26 @@ def product(db):
 
 
 @pytest.fixture()
+def category(db):
+    return catalog_models.Category.objects.create(label="Cookies")
+
+
+@pytest.fixture()
+def presentation(db):
+    return catalog_models.Presentation.objects.create(label="Bolsa")
+
+
+def valid_product_payload(category, presentation, /, **overrides):
+    payload = {
+        "description": "Galletas artesanales",
+        "category": category.id,
+        "presentation": presentation.id,
+    }
+    payload.update(overrides)
+    return payload
+
+
+@pytest.fixture()
 def admin_user(db):
     user_model = get_user_model()
     return user_model.objects.create_superuser(
@@ -496,11 +516,11 @@ class TestApiViews:
         assert model_class.objects.filter(pk=response.data["id"]).exists()
 
     @pytest.mark.django_db
-    def test_product_create_update_delete_flow(self, auth_client):
+    def test_product_create_update_delete_flow(self, auth_client, category, presentation):
         with patch("apps._api.mixins.publish_handler") as publish_mock:
             create_response = auth_client.post(
                 "/api/store-mgmt/products/",
-                {"name": "cookie", "price": "5.00", "sku": 9991},
+                valid_product_payload(category, presentation, name="cookie", price="5.00", sku=9991),
             )
 
         assert create_response.status_code == 201
@@ -543,74 +563,86 @@ class TestApiViews:
         assert "name" in response.data
 
     @pytest.mark.django_db
-    def test_product_validation_price_min(self, auth_client):
+    def test_product_validation_price_min(self, auth_client, category, presentation):
         response = auth_client.post(
             "/api/store-mgmt/products/",
-            {"name": "cookie", "price": "0.00", "sku": 7771},
+            valid_product_payload(category, presentation, name="cookie", price="0.00", sku=7771),
         )
 
         assert response.status_code == 400
         assert "price" in response.data
 
     @pytest.mark.django_db
-    def test_product_validation_duplicate_active_name(self, auth_client, product):
+    def test_product_validation_duplicate_active_name(self, auth_client, product, category, presentation):
         response = auth_client.post(
             "/api/store-mgmt/products/",
-            {"name": product.name, "price": "5.00", "sku": 7772},
+            valid_product_payload(category, presentation, name=product.name, price="5.00", sku=7772),
         )
 
         assert response.status_code == 400
         assert "name" in response.data
 
     @pytest.mark.django_db
-    def test_product_validation_missing_fields(self, auth_client):
+    def test_product_validation_missing_fields(self, auth_client, category, presentation):
         response = auth_client.post(
             "/api/store-mgmt/products/",
-            {"name": "cookie", "sku": 7773},
+            valid_product_payload(category, presentation, name="cookie", sku=7773),
         )
 
         assert response.status_code == 201
         assert response.data["price"] == "0.00"
 
     @pytest.mark.django_db
-    def test_product_validation_blank_fields(self, auth_client):
+    def test_product_validation_blank_fields(self, auth_client, category, presentation):
         response = auth_client.post(
             "/api/store-mgmt/products/",
-            {"name": "", "price": "5.00", "sku": 7774},
+            valid_product_payload(category, presentation, name="", price="5.00", sku=7774),
         )
 
         assert response.status_code == 400
         assert "name" in response.data
 
     @pytest.mark.django_db
-    def test_product_validation_invalid_price_format(self, auth_client):
+    def test_product_validation_invalid_price_format(self, auth_client, category, presentation):
         response = auth_client.post(
             "/api/store-mgmt/products/",
-            {"name": "cookie", "price": "abc", "sku": 7775},
+            valid_product_payload(category, presentation, name="cookie", price="abc", sku=7775),
         )
 
         assert response.status_code == 400
         assert "price" in response.data
 
     @pytest.mark.django_db
-    def test_product_validation_price_decimal_places(self, auth_client):
+    def test_product_validation_price_decimal_places(self, auth_client, category, presentation):
         response = auth_client.post(
             "/api/store-mgmt/products/",
-            {"name": "cookie", "price": "5.123", "sku": 7776},
+            valid_product_payload(category, presentation, name="cookie", price="5.123", sku=7776),
         )
 
         assert response.status_code == 400
         assert "price" in response.data
 
     @pytest.mark.django_db
-    def test_product_validation_name_max_length(self, auth_client):
+    def test_product_validation_name_max_length(self, auth_client, category, presentation):
         response = auth_client.post(
             "/api/store-mgmt/products/",
-            {"name": "a" * 256, "price": "5.00", "sku": 7777},
+            valid_product_payload(category, presentation, name="a" * 256, price="5.00", sku=7777),
         )
 
         assert response.status_code == 400
         assert "name" in response.data
+
+    @pytest.mark.django_db
+    def test_product_validation_missing_category_presentation_description(self, auth_client):
+        response = auth_client.post(
+            "/api/store-mgmt/products/",
+            {"name": "cookie", "price": "5.00", "sku": 7778},
+        )
+
+        assert response.status_code == 400
+        assert "category" in response.data
+        assert "presentation" in response.data
+        assert "description" in response.data
 
     @pytest.mark.django_db
     def test_soft_delete_hides_from_list(self, auth_client, product):
@@ -710,14 +742,12 @@ class TestApiViews:
 
 class TestSerializers:
     @pytest.mark.django_db
-    def test_product_serializer_read_only_fields(self):
+    def test_product_serializer_read_only_fields(self, category, presentation):
         serializer = ProductSerializer(
-            data={
-                "name": "cookie",
-                "price": "5.00",
-                "sku": 6661,
-                "version": 99,
-            },
+            data=valid_product_payload(
+                category, presentation,
+                name="cookie", price="5.00", sku=6661, version=99,
+            ),
         )
 
         assert serializer.is_valid(), serializer.errors
@@ -810,48 +840,57 @@ class TestSerializers:
         assert models.Inventory.objects.get(store=store, product=product).quantity == 1
 
     @pytest.mark.django_db
-    def test_product_serializer_duplicate_active_name(self, product):
+    def test_product_serializer_duplicate_active_name(self, product, category, presentation):
         serializer = ProductSerializer(
-            data={"name": product.name, "price": "5.00", "sku": 5551},
+            data=valid_product_payload(category, presentation, name=product.name, price="5.00", sku=5551),
         )
 
         assert serializer.is_valid() is False
         assert "name" in serializer.errors
 
     @pytest.mark.django_db
-    def test_product_serializer_missing_fields(self):
-        serializer = ProductSerializer(data={"name": "cookie", "sku": 5552})
+    def test_product_serializer_missing_fields(self, category, presentation):
+        serializer = ProductSerializer(data=valid_product_payload(category, presentation, name="cookie", sku=5552))
 
         assert serializer.is_valid(), serializer.errors
         product = serializer.save()
         assert str(product.price) == "0.00"
 
     @pytest.mark.django_db
-    def test_product_serializer_blank_fields(self):
+    def test_product_serializer_blank_fields(self, category, presentation):
         serializer = ProductSerializer(
-            data={"name": "", "price": "5.00", "sku": 5553},
+            data=valid_product_payload(category, presentation, name="", price="5.00", sku=5553),
         )
 
         assert serializer.is_valid() is False
         assert "name" in serializer.errors
 
     @pytest.mark.django_db
-    def test_product_serializer_invalid_price_format(self):
+    def test_product_serializer_invalid_price_format(self, category, presentation):
         serializer = ProductSerializer(
-            data={"name": "cookie", "price": "abc", "sku": 5554},
+            data=valid_product_payload(category, presentation, name="cookie", price="abc", sku=5554),
         )
 
         assert serializer.is_valid() is False
         assert "price" in serializer.errors
 
     @pytest.mark.django_db
-    def test_product_serializer_price_decimal_places(self):
+    def test_product_serializer_price_decimal_places(self, category, presentation):
         serializer = ProductSerializer(
-            data={"name": "cookie", "price": "5.123", "sku": 5555},
+            data=valid_product_payload(category, presentation, name="cookie", price="5.123", sku=5555),
         )
 
         assert serializer.is_valid() is False
         assert "price" in serializer.errors
+
+    @pytest.mark.django_db
+    def test_product_serializer_missing_category_presentation_description(self):
+        serializer = ProductSerializer(data={"name": "cookie", "price": "5.00", "sku": 5556})
+
+        assert serializer.is_valid() is False
+        assert "category" in serializer.errors
+        assert "presentation" in serializer.errors
+        assert "description" in serializer.errors
 
 
 class TestModels:

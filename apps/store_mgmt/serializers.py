@@ -205,7 +205,6 @@ class ProductSerializer(PublicMixin, serializers.ModelSerializer):
         "slug",
         "description",
         "badge",
-        "img",
         "category",
         "presentation",
         "variants",
@@ -221,24 +220,19 @@ class ProductSerializer(PublicMixin, serializers.ModelSerializer):
             "description",
             "badge",
             "price",
-            "img",
             "category",
             "presentation",
             "variants",
         ) + ["images"]
         read_only_fields = auditory_fields() + ["images"]
+        extra_kwargs = {
+            "category": {"required": True, "allow_null": False},
+            "presentation": {"required": True, "allow_null": False},
+            "description": {"required": True, "allow_blank": False},
+        }
 
     def get_images(self, instance) -> list:
-        return ProductImageSerializer(instance.images.all(), many=True, context=self.context).data
-
-    def to_internal_value(self, data):
-        if hasattr(data, "_mutable"):
-            data._mutable = True
-
-        if "img" in data and not data["img"]:
-            data.pop("img")
-
-        return super().to_internal_value(data)
+        return ProductImageSerializer(instance.images.filter(deleted_at__isnull=True), many=True, context=self.context).data
 
     def to_representation(self, instance):
         res = super().to_representation(instance)
