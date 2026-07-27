@@ -6,7 +6,6 @@ import apps._redis as redis_infra
 
 MODEL = Literal[
     "product",
-    "product_image",
     "establishment",
     "factory",
     "store",

@@ -223,7 +223,8 @@ class ProductSerializer(PublicMixin, serializers.ModelSerializer):
             "category",
             "presentation",
             "variants",
-        ) + ["images"]
+            "images",
+        )
         read_only_fields = auditory_fields() + ["images"]
         extra_kwargs = {
             "category": {"required": True, "allow_null": False},

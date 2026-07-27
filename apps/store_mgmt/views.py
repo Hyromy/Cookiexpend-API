@@ -112,18 +112,36 @@ class ProductViewSet(MixinViewSet):
 
         return obj
 
+    def _lookup_product(self, pk):
+        """Look up the product without the object-level permission check, which has no branch for POST."""
 
-class ProductImageViewSet(MixinViewSet):
-    model_name = "product_image"
-    queryset = models.ProductImage.objects.all()
-    serializer_class = serializers.ProductImageSerializer
-    filterset_fields = ["product"]
-    permission_classes = [
-        any_of(
-            permission(user=["Store manager", "Public"], can=["see"]),
-            permission(user=["Factory manager"], can=["see", "create", "update", "delete"]),
-        )
-    ]
+        queryset = self.filter_queryset(self.get_queryset())
+        filter_kwargs = {"pk": pk} if str(pk).isdigit() else {"slug": pk}
+        return get_object_or_404(queryset, **filter_kwargs)
+
+    @action(detail=True, methods=["post"], url_path="images")
+    def add_image(self, request, pk=None):
+        product = self._lookup_product(pk)
+
+        data = request.data.copy()
+        data["product"] = product.id
+        serializer = serializers.ProductImageSerializer(data=data, context=self.get_serializer_context())
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+
+        response_data = self.get_serializer(product).data
+        publish_handler(self.model_name, "updated", response_data, self.SOURCE)
+        return Response(response_data, status=201)
+
+    @action(detail=True, methods=["delete"], url_path=r"images/(?P<image_id>\d+)")
+    def remove_image(self, request, pk=None, image_id=None):
+        product = self.get_object()
+        image = get_object_or_404(models.ProductImage.objects, product=product, pk=image_id)
+        image.delete()
+
+        response_data = self.get_serializer(product).data
+        publish_handler(self.model_name, "updated", response_data, self.SOURCE)
+        return Response(response_data, status=200)
 
 
 class StatusViewSet(MixinViewSet):

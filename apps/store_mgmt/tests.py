@@ -403,66 +403,58 @@ class TestApiViews:
         assert response.data["images"] == []
 
     @pytest.mark.django_db
-    def test_product_image_create_requires_auth(self, api_client, product):
+    def test_product_add_image_requires_auth(self, api_client, product):
         response = api_client.post(
-            "/api/store-mgmt/product-images/",
-            {"product": product.id, "img": _make_uploaded_image()},
+            f"/api/store-mgmt/products/{product.id}/images/",
+            {"img": _make_uploaded_image()},
         )
 
         assert response.status_code in {401, 403}
 
     @pytest.mark.django_db
-    def test_product_image_create_and_appears_on_product(self, auth_client, product):
+    def test_product_add_image_appears_on_product(self, auth_client, product):
         with patch("apps._api.mixins.publish_handler"):
             response = auth_client.post(
-                "/api/store-mgmt/product-images/",
-                {"product": product.id, "img": _make_uploaded_image(), "order": 1},
+                f"/api/store-mgmt/products/{product.id}/images/",
+                {"img": _make_uploaded_image(), "order": 1},
             )
 
         assert response.status_code == 201
-        assert response.data["img"].endswith(".webp")
+        assert len(response.data["images"]) == 1
+        assert response.data["images"][0]["img"].endswith(".webp")
+        assert response.data["images"][0]["order"] == 1
         assert models.ProductImage.objects.filter(product=product).count() == 1
 
-        product_response = auth_client.get(f"/api/store-mgmt/products/{product.slug}/")
-        assert len(product_response.data["images"]) == 1
-        assert product_response.data["images"][0]["order"] == 1
-
     @pytest.mark.django_db
-    def test_product_image_list_filters_by_product(self, auth_client, product):
+    def test_product_add_image_scoped_to_correct_product(self, auth_client, product):
         other_product = _create_product(name="cake")
 
         with patch("apps._api.mixins.publish_handler"):
-            auth_client.post(
-                "/api/store-mgmt/product-images/",
-                {"product": product.id, "img": _make_uploaded_image()},
-            )
-            auth_client.post(
-                "/api/store-mgmt/product-images/",
-                {"product": other_product.id, "img": _make_uploaded_image()},
-            )
+            auth_client.post(f"/api/store-mgmt/products/{product.id}/images/", {"img": _make_uploaded_image()})
+            auth_client.post(f"/api/store-mgmt/products/{other_product.id}/images/", {"img": _make_uploaded_image()})
 
-        response = auth_client.get(f"/api/store-mgmt/product-images/?product={product.id}")
+        response = auth_client.get(f"/api/store-mgmt/products/{product.slug}/")
 
         assert response.status_code == 200
-        assert len(response.data) == 1
-        assert response.data[0]["product"] == product.id
+        assert len(response.data["images"]) == 1
 
     @pytest.mark.django_db
-    def test_product_image_delete_requires_auth(self, api_client, product):
+    def test_product_remove_image_requires_auth(self, api_client, product):
         image = models.ProductImage.objects.create(product=product, img=_make_uploaded_image())
 
-        response = api_client.delete(f"/api/store-mgmt/product-images/{image.id}/")
+        response = api_client.delete(f"/api/store-mgmt/products/{product.id}/images/{image.id}/")
 
         assert response.status_code in {401, 403}
 
     @pytest.mark.django_db
-    def test_product_image_delete(self, auth_client, product):
+    def test_product_remove_image(self, auth_client, product):
         image = models.ProductImage.objects.create(product=product, img=_make_uploaded_image())
 
         with patch("apps._api.mixins.publish_handler"):
-            response = auth_client.delete(f"/api/store-mgmt/product-images/{image.id}/")
+            response = auth_client.delete(f"/api/store-mgmt/products/{product.id}/images/{image.id}/")
 
-        assert response.status_code == 204
+        assert response.status_code == 200
+        assert response.data["images"] == []
         assert not models.ProductImage.objects.filter(pk=image.pk).exists()
 
     @pytest.mark.django_db
