@@ -121,13 +121,26 @@ class ProductViewSet(MixinViewSet):
 
     @action(detail=True, methods=["post"], url_path="images")
     def add_image(self, request, pk=None):
+        """Accepts one or more files under the "img" field so the front end can upload a whole batch in a single request."""
+
         product = self._lookup_product(pk)
 
-        data = request.data.copy()
-        data["product"] = product.id
-        serializer = serializers.ProductImageSerializer(data=data, context=self.get_serializer_context())
+        images = request.FILES.getlist("img")
+        if not images:
+            return Response({"img": ["At least one image is required."]}, status=400)
+
+        starting_order = product.images.count()
+        data = [
+            {"product": product.id, "img": img, "order": starting_order + index}
+            for index, img in enumerate(images)
+        ]
+
+        serializer = serializers.ProductImageSerializer(
+            data=data, many=True, context=self.get_serializer_context()
+        )
         serializer.is_valid(raise_exception=True)
-        serializer.save()
+        with transaction.atomic():
+            serializer.save()
 
         response_data = self.get_serializer(product).data
         publish_handler(self.model_name, "updated", response_data, self.SOURCE)

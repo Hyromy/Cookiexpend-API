@@ -416,14 +416,47 @@ class TestApiViews:
         with patch("apps._api.mixins.publish_handler"):
             response = auth_client.post(
                 f"/api/store-mgmt/products/{product.id}/images/",
-                {"img": _make_uploaded_image(), "order": 1},
+                {"img": _make_uploaded_image()},
             )
 
         assert response.status_code == 201
         assert len(response.data["images"]) == 1
         assert response.data["images"][0]["img"].endswith(".webp")
-        assert response.data["images"][0]["order"] == 1
+        assert response.data["images"][0]["order"] == 0
         assert models.ProductImage.objects.filter(product=product).count() == 1
+
+    @pytest.mark.django_db
+    def test_product_add_image_requires_at_least_one_file(self, auth_client, product):
+        response = auth_client.post(f"/api/store-mgmt/products/{product.id}/images/", {})
+
+        assert response.status_code == 400
+        assert models.ProductImage.objects.filter(product=product).count() == 0
+
+    @pytest.mark.django_db
+    def test_product_add_multiple_images_in_one_request(self, auth_client, product):
+        with patch("apps._api.mixins.publish_handler"):
+            response = auth_client.post(
+                f"/api/store-mgmt/products/{product.id}/images/",
+                {"img": [_make_uploaded_image("a.png"), _make_uploaded_image("b.png")]},
+            )
+
+        assert response.status_code == 201
+        assert len(response.data["images"]) == 2
+        assert [image["order"] for image in response.data["images"]] == [0, 1]
+        assert models.ProductImage.objects.filter(product=product).count() == 2
+
+    @pytest.mark.django_db
+    def test_product_add_more_images_continues_order_sequence(self, auth_client, product):
+        models.ProductImage.objects.create(product=product, img=_make_uploaded_image(), order=0)
+
+        with patch("apps._api.mixins.publish_handler"):
+            response = auth_client.post(
+                f"/api/store-mgmt/products/{product.id}/images/",
+                {"img": [_make_uploaded_image("a.png"), _make_uploaded_image("b.png")]},
+            )
+
+        assert response.status_code == 201
+        assert [image["order"] for image in response.data["images"]] == [0, 1, 2]
 
     @pytest.mark.django_db
     def test_product_add_image_scoped_to_correct_product(self, auth_client, product):
