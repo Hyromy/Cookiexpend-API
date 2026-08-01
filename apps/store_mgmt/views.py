@@ -8,17 +8,20 @@ from django.http import StreamingHttpResponse
 from django.shortcuts import get_object_or_404
 from django.views.decorators.http import require_GET
 from rest_framework.decorators import action, api_view, permission_classes
+from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
 import apps._redis as redis_infra
 from apps._api.mixins import MixinViewSet
+from apps._api.utils import MassiveHandler
 from apps._api.views import api_health_check
 from apps._auth.permissions import (
     any_of,
     permission,
 )
 from apps._redis.gossiper import publish_handler
+from apps.catalog import models as cat_models
 
 from . import models, serializers
 
@@ -100,6 +103,7 @@ class ProductViewSet(MixinViewSet):
             permission(user=["Factory manager"], can=["see", "create", "update", "delete"]),
         )
     ]
+
     def get_object(self):
         """Look up the product by numeric pk or by slug, so detail URLs work both ways."""
 
@@ -111,6 +115,102 @@ class ProductViewSet(MixinViewSet):
         self.check_object_permissions(self.request, obj)
 
         return obj
+
+    @action(
+        detail=False,
+        methods=["post"],
+        url_path="massive",
+        permission_classes=[
+            permission(user=["Factory manager"], can=["create"]),
+        ],
+    )
+    def massive(self, request):
+        mh = MassiveHandler(2)
+
+        keys_to_parse = (("category", cat_models.Category),)
+        for i, product_data in enumerate(request.data[0]):
+            needs_to_continue = False
+            for col_name, model in keys_to_parse:
+                if mh.fk_value_handler(
+                    current_item=product_data,
+                    col_name=col_name,
+                    model=model,
+                    sheet_index=0,
+                    obj_index=i,
+                    filter_by="label",
+                ):
+                    needs_to_continue = True
+
+            if needs_to_continue:
+                continue
+
+            try:
+                serializer = self.get_serializer(data=product_data)
+                serializer.is_valid(raise_exception=True)
+                serializer.save()
+
+                mh.set(slot="inserted", sheet_index=0, obj_index=i, value=serializer.data)
+                publish_handler(
+                    self.model_name, "created", serializer.data, self.SOURCE + " massive"
+                )
+
+            except ValidationError as e:
+                mh.validation_err_handler(e, sheet_index=0, current_obj=product_data, obj_index=i)
+
+            except Exception as e:
+                mh.unknown_err_handler(e, sheet_index=0, obj_index=i)
+
+        for i, product_variant_data in enumerate(request.data[1]):
+            prod_1 = models.Product.objects.filter(sku=product_variant_data.get("sku"))
+            prod_2 = models.Product.objects.filter(sku=product_variant_data.get("variant_sku"))
+
+            if prod_1.exists() and prod_2.exists():
+                try:
+                    prod_1 = prod_1.first()
+                    prod_2 = prod_2.first()
+
+                    if prod_2 in prod_1.variants.all():
+                        mh.set(
+                            slot="duplicated",
+                            sheet_index=1,
+                            obj_index=i,
+                            value=f"sku: '{prod_1.sku}' and variant_sku: '{prod_2.sku}' are already linked.",
+                        )
+                        continue
+
+                    prod_1.variants.add(prod_2)
+                    prod_1.save()
+
+                    serializer = self.get_serializer(prod_1)
+
+                    mh.set(
+                        slot="inserted",
+                        sheet_index=1,
+                        obj_index=i,
+                        value=serializer.data,
+                    )
+                    publish_handler(
+                        self.model_name, "updated", serializer.data, self.SOURCE + " massive"
+                    )
+
+                except ValidationError as e:
+                    mh.validation_err_handler(
+                        e, sheet_index=1, current_obj=product_variant_data, obj_index=i
+                    )
+
+                except Exception as e:
+                    mh.unknown_err_handler(e, sheet_index=1, obj_index=i)
+
+            else:
+                objs = [product_variant_data.get(i, "N/A") for i in ["sku", "variant_sku"]]
+                mh.set(
+                    slot="errors",
+                    sheet_index=1,
+                    obj_index=i,
+                    value=f"sku: '{', '.join(objs)}' needs to be a valid SKU for the product and the variant.",
+                )
+
+        return Response(mh.reply, status=200)
 
 
 class StatusViewSet(MixinViewSet):
