@@ -403,92 +403,99 @@ class TestApiViews:
         assert response.data["images"] == []
 
     @pytest.mark.django_db
-    def test_product_add_image_requires_auth(self, api_client, product):
-        response = api_client.post(
-            f"/api/store-mgmt/products/{product.id}/images/",
-            {"img": _make_uploaded_image()},
-        )
-
-        assert response.status_code in {401, 403}
-
-    @pytest.mark.django_db
-    def test_product_add_image_appears_on_product(self, auth_client, product):
+    def test_product_create_with_images_in_single_call(self, auth_client, category, presentation):
         with patch("apps._api.mixins.publish_handler"):
             response = auth_client.post(
-                f"/api/store-mgmt/products/{product.id}/images/",
-                {"img": _make_uploaded_image()},
-            )
-
-        assert response.status_code == 201
-        assert len(response.data["images"]) == 1
-        assert response.data["images"][0]["img"].endswith(".webp")
-        assert response.data["images"][0]["order"] == 0
-        assert models.ProductImage.objects.filter(product=product).count() == 1
-
-    @pytest.mark.django_db
-    def test_product_add_image_requires_at_least_one_file(self, auth_client, product):
-        response = auth_client.post(f"/api/store-mgmt/products/{product.id}/images/", {})
-
-        assert response.status_code == 400
-        assert models.ProductImage.objects.filter(product=product).count() == 0
-
-    @pytest.mark.django_db
-    def test_product_add_multiple_images_in_one_request(self, auth_client, product):
-        with patch("apps._api.mixins.publish_handler"):
-            response = auth_client.post(
-                f"/api/store-mgmt/products/{product.id}/images/",
-                {"img": [_make_uploaded_image("a.png"), _make_uploaded_image("b.png")]},
+                "/api/store-mgmt/products/",
+                valid_product_payload(
+                    category, presentation,
+                    name="cookie", price="5.00", sku=6001,
+                    img=[_make_uploaded_image("a.png"), _make_uploaded_image("b.png")],
+                ),
             )
 
         assert response.status_code == 201
         assert len(response.data["images"]) == 2
         assert [image["order"] for image in response.data["images"]] == [0, 1]
+        assert response.data["images"][0]["img"].endswith(".webp")
+        product = models.Product.objects.get(pk=response.data["id"])
         assert models.ProductImage.objects.filter(product=product).count() == 2
 
     @pytest.mark.django_db
-    def test_product_add_more_images_continues_order_sequence(self, auth_client, product):
-        models.ProductImage.objects.create(product=product, img=_make_uploaded_image(), order=0)
-
+    def test_product_create_without_images(self, auth_client, category, presentation):
         with patch("apps._api.mixins.publish_handler"):
             response = auth_client.post(
-                f"/api/store-mgmt/products/{product.id}/images/",
-                {"img": [_make_uploaded_image("a.png"), _make_uploaded_image("b.png")]},
+                "/api/store-mgmt/products/",
+                valid_product_payload(category, presentation, name="cookie", price="5.00", sku=6002),
             )
 
         assert response.status_code == 201
+        assert response.data["images"] == []
+
+    @pytest.mark.django_db
+    def test_product_update_adds_images_and_continues_order_sequence(self, auth_client, product):
+        models.ProductImage.objects.create(product=product, img=_make_uploaded_image(), order=0)
+
+        with patch("apps._api.mixins.publish_handler"):
+            response = auth_client.patch(
+                f"/api/store-mgmt/products/{product.id}/",
+                {"img": [_make_uploaded_image("a.png"), _make_uploaded_image("b.png")]},
+            )
+
+        assert response.status_code == 200
         assert [image["order"] for image in response.data["images"]] == [0, 1, 2]
 
     @pytest.mark.django_db
-    def test_product_add_image_scoped_to_correct_product(self, auth_client, product):
-        other_product = _create_product(name="cake")
+    def test_product_update_removes_images_via_remove_images_field(self, auth_client, product):
+        keep = models.ProductImage.objects.create(product=product, img=_make_uploaded_image(), order=0)
+        remove = models.ProductImage.objects.create(product=product, img=_make_uploaded_image(), order=1)
 
         with patch("apps._api.mixins.publish_handler"):
-            auth_client.post(f"/api/store-mgmt/products/{product.id}/images/", {"img": _make_uploaded_image()})
-            auth_client.post(f"/api/store-mgmt/products/{other_product.id}/images/", {"img": _make_uploaded_image()})
+            response = auth_client.patch(
+                f"/api/store-mgmt/products/{product.id}/",
+                {"remove_images": [remove.id]},
+            )
 
-        response = auth_client.get(f"/api/store-mgmt/products/{product.slug}/")
+        assert response.status_code == 200
+        assert [image["id"] for image in response.data["images"]] == [keep.id]
+        assert not models.ProductImage.objects.filter(pk=remove.pk).exists()
+
+    @pytest.mark.django_db
+    def test_product_update_adds_and_removes_images_in_one_call(self, auth_client, product):
+        remove = models.ProductImage.objects.create(product=product, img=_make_uploaded_image(), order=0)
+
+        with patch("apps._api.mixins.publish_handler"):
+            response = auth_client.patch(
+                f"/api/store-mgmt/products/{product.id}/",
+                {"remove_images": [remove.id], "img": [_make_uploaded_image("a.png")]},
+            )
 
         assert response.status_code == 200
         assert len(response.data["images"]) == 1
+        assert response.data["images"][0]["id"] != remove.id
+        assert not models.ProductImage.objects.filter(pk=remove.pk).exists()
 
     @pytest.mark.django_db
-    def test_product_remove_image_requires_auth(self, api_client, product):
-        image = models.ProductImage.objects.create(product=product, img=_make_uploaded_image())
-
-        response = api_client.delete(f"/api/store-mgmt/products/{product.id}/images/{image.id}/")
-
-        assert response.status_code in {401, 403}
-
-    @pytest.mark.django_db
-    def test_product_remove_image(self, auth_client, product):
-        image = models.ProductImage.objects.create(product=product, img=_make_uploaded_image())
-
+    def test_product_images_scoped_to_correct_product(self, auth_client, category, presentation):
         with patch("apps._api.mixins.publish_handler"):
-            response = auth_client.delete(f"/api/store-mgmt/products/{product.id}/images/{image.id}/")
+            first = auth_client.post(
+                "/api/store-mgmt/products/",
+                valid_product_payload(
+                    category, presentation, name="cookie", price="5.00", sku=6003,
+                    img=[_make_uploaded_image()],
+                ),
+            )
+            second = auth_client.post(
+                "/api/store-mgmt/products/",
+                valid_product_payload(
+                    category, presentation, name="cake", price="5.00", sku=6004,
+                    img=[_make_uploaded_image()],
+                ),
+            )
 
-        assert response.status_code == 200
-        assert response.data["images"] == []
-        assert not models.ProductImage.objects.filter(pk=image.pk).exists()
+        assert len(first.data["images"]) == 1
+        assert len(second.data["images"]) == 1
+        assert first.data["images"][0]["id"] != second.data["images"][0]["id"]
 
     @pytest.mark.django_db
     def test_product_image_url_is_absolute(self, api_client, product):

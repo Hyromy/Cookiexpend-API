@@ -199,6 +199,12 @@ class ProductImageSerializer(serializers.ModelSerializer):
 
 class ProductSerializer(PublicMixin, serializers.ModelSerializer):
     images = serializers.SerializerMethodField()
+    img = serializers.ListField(
+        child=serializers.ImageField(), write_only=True, required=False
+    )
+    remove_images = serializers.ListField(
+        child=serializers.IntegerField(), write_only=True, required=False
+    )
 
     public_fields = {
         "name",
@@ -224,7 +230,7 @@ class ProductSerializer(PublicMixin, serializers.ModelSerializer):
             "presentation",
             "variants",
             "images",
-        )
+        ) + ["img", "remove_images"]
         read_only_fields = auditory_fields() + ["images"]
         extra_kwargs = {
             "category": {"required": True, "allow_null": False},
@@ -234,6 +240,36 @@ class ProductSerializer(PublicMixin, serializers.ModelSerializer):
 
     def get_images(self, instance) -> list:
         return ProductImageSerializer(instance.images.filter(deleted_at__isnull=True), many=True, context=self.context).data
+
+    def _add_images(self, product, files):
+        if not files:
+            return
+
+        next_order = product.images.filter(deleted_at__isnull=True).count()
+        for offset, file in enumerate(files):
+            models.ProductImage.objects.create(product=product, img=file, order=next_order + offset)
+
+    @transaction.atomic
+    def create(self, validated_data):
+        img_files = validated_data.pop("img", [])
+        validated_data.pop("remove_images", None)
+
+        product = super().create(validated_data)
+        self._add_images(product, img_files)
+        return product
+
+    @transaction.atomic
+    def update(self, instance, validated_data):
+        img_files = validated_data.pop("img", [])
+        remove_ids = validated_data.pop("remove_images", [])
+
+        instance = super().update(instance, validated_data)
+
+        if remove_ids:
+            instance.images.filter(deleted_at__isnull=True, id__in=remove_ids).delete()
+
+        self._add_images(instance, img_files)
+        return instance
 
     def to_representation(self, instance):
         res = super().to_representation(instance)
