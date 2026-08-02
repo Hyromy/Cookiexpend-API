@@ -290,6 +290,19 @@ class TestCatalogFieldBehavior:
         category.refresh_from_db()
         assert category.logo.name
 
+    def test_category_update_survives_missing_logo_file_on_disk(self, auth_client):
+        category = models.Category.objects.create(label="Cookies")
+        models.Category.objects.filter(pk=category.pk).update(logo="categories/missing.webp")
+
+        with patch("apps._api.mixins.publish_handler"):
+            response = auth_client.patch(
+                f"/api/catalog/categories/{category.id}/", {"order": 1}
+            )
+
+        assert response.status_code == 200
+        category.refresh_from_db()
+        assert category.logo.name == "categories/missing.webp"
+
     def test_category_logo_is_absolute_url(self, api_client):
         category = models.Category.objects.create(label="Cookies")
         models.Category.objects.filter(pk=category.pk).update(logo="categories/test.webp")
@@ -332,6 +345,16 @@ class TestCatalogFieldBehavior:
         assert response.status_code == 200
         assert len(response.data["subjects"]) == 1
         assert response.data["subjects"][0]["label"] == subject.label
+
+    def test_department_excludes_deleted_subjects(self, auth_client, department, subject):
+        with patch("apps._api.mixins.publish_handler"):
+            delete_response = auth_client.delete(f"/api/catalog/subjects/{subject.id}/")
+        assert delete_response.status_code == 204
+
+        response = auth_client.get(f"/api/catalog/departments/{department.id}/")
+
+        assert response.status_code == 200
+        assert response.data["subjects"] == []
 
     def test_retailer_create_with_brand(self, auth_client):
         brand = models.Brand.objects.create(name="Acme")

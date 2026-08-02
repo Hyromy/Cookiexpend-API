@@ -74,7 +74,7 @@ class SubjectSerializer(serializers.ModelSerializer):
 
 
 class DepartmentSerializer(PublicMixin, serializers.ModelSerializer):
-    subjects = SubjectSerializer(many=True, read_only=True)
+    subjects = serializers.SerializerMethodField()
 
     # `email` is only used server-side to route contact messages (see the `contact`
     # action) and must stay hidden from anonymous storefront visitors.
@@ -83,6 +83,9 @@ class DepartmentSerializer(PublicMixin, serializers.ModelSerializer):
     class Meta:
         model = models.Department
         fields = ["id", "name", "email", "order", "subjects"]
+
+    def get_subjects(self, instance) -> list:
+        return SubjectSerializer(instance.subjects.filter(deleted_at__isnull=True), many=True).data
 
 
 class BrandSerializer(serializers.ModelSerializer):
