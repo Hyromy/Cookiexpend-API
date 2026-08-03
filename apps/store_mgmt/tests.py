@@ -1,4 +1,5 @@
 import random
+from io import BytesIO
 from unittest.mock import patch
 
 import pytest
@@ -7,7 +8,9 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.contrib.messages.storage.fallback import FallbackStorage
 from django.contrib.sessions.middleware import SessionMiddleware
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import RequestFactory
+from PIL import Image
 from rest_framework.test import APIClient
 
 from apps.catalog import models as catalog_models
@@ -55,6 +58,26 @@ def jwt_client(user):
 @pytest.fixture()
 def product(db):
     return Product.objects.create(name="cookie", price="5.00", sku=122)
+
+
+@pytest.fixture()
+def category(db):
+    return catalog_models.Category.objects.create(label="Cookies")
+
+
+@pytest.fixture()
+def presentation(db):
+    return catalog_models.Presentation.objects.create(label="Bolsa")
+
+
+def valid_product_payload(category, presentation, /, **overrides):
+    payload = {
+        "description": "Galletas artesanales",
+        "category": category.id,
+        "presentation": presentation.id,
+    }
+    payload.update(overrides)
+    return payload
 
 
 @pytest.fixture()
@@ -137,6 +160,13 @@ def _create_product(name="cookie", sku=None):
     if sku is None:
         sku = random.randint(1, 999999)
     return models.Product.objects.create(name=name, price="5.00", sku=sku)
+
+
+def _make_uploaded_image(name="test.png"):
+    buffer = BytesIO()
+    Image.new("RGB", (10, 10), color=(0, 128, 255)).save(buffer, "PNG")
+    buffer.seek(0)
+    return SimpleUploadedFile(name, buffer.read(), content_type="image/png")
 
 
 def _create_factory(establishment=None):
@@ -366,6 +396,118 @@ class TestApiViews:
         assert response.data["category"]["logo"].startswith("http://testserver/media/")
 
     @pytest.mark.django_db
+    def test_product_detail_includes_empty_images_list(self, api_client, product):
+        response = api_client.get(f"/api/store-mgmt/products/{product.slug}/")
+
+        assert response.status_code == 200
+        assert response.data["images"] == []
+
+    @pytest.mark.django_db
+    def test_product_create_with_images_in_single_call(self, auth_client, category, presentation):
+        with patch("apps._api.mixins.publish_handler"):
+            response = auth_client.post(
+                "/api/store-mgmt/products/",
+                valid_product_payload(
+                    category, presentation,
+                    name="cookie", price="5.00", sku=6001,
+                    img=[_make_uploaded_image("a.png"), _make_uploaded_image("b.png")],
+                ),
+            )
+
+        assert response.status_code == 201
+        assert len(response.data["images"]) == 2
+        assert [image["order"] for image in response.data["images"]] == [0, 1]
+        assert response.data["images"][0]["img"].endswith(".webp")
+        product = models.Product.objects.get(pk=response.data["id"])
+        assert models.ProductImage.objects.filter(product=product).count() == 2
+
+    @pytest.mark.django_db
+    def test_product_create_without_images(self, auth_client, category, presentation):
+        with patch("apps._api.mixins.publish_handler"):
+            response = auth_client.post(
+                "/api/store-mgmt/products/",
+                valid_product_payload(category, presentation, name="cookie", price="5.00", sku=6002),
+            )
+
+        assert response.status_code == 201
+        assert response.data["images"] == []
+
+    @pytest.mark.django_db
+    def test_product_update_adds_images_and_continues_order_sequence(self, auth_client, product):
+        models.ProductImage.objects.create(product=product, img=_make_uploaded_image(), order=0)
+
+        with patch("apps._api.mixins.publish_handler"):
+            response = auth_client.patch(
+                f"/api/store-mgmt/products/{product.id}/",
+                {"img": [_make_uploaded_image("a.png"), _make_uploaded_image("b.png")]},
+            )
+
+        assert response.status_code == 200
+        assert [image["order"] for image in response.data["images"]] == [0, 1, 2]
+
+    @pytest.mark.django_db
+    def test_product_update_removes_images_via_remove_images_field(self, auth_client, product):
+        keep = models.ProductImage.objects.create(product=product, img=_make_uploaded_image(), order=0)
+        remove = models.ProductImage.objects.create(product=product, img=_make_uploaded_image(), order=1)
+
+        with patch("apps._api.mixins.publish_handler"):
+            response = auth_client.patch(
+                f"/api/store-mgmt/products/{product.id}/",
+                {"remove_images": [remove.id]},
+            )
+
+        assert response.status_code == 200
+        assert [image["id"] for image in response.data["images"]] == [keep.id]
+        assert not models.ProductImage.objects.filter(pk=remove.pk).exists()
+
+    @pytest.mark.django_db
+    def test_product_update_adds_and_removes_images_in_one_call(self, auth_client, product):
+        remove = models.ProductImage.objects.create(product=product, img=_make_uploaded_image(), order=0)
+
+        with patch("apps._api.mixins.publish_handler"):
+            response = auth_client.patch(
+                f"/api/store-mgmt/products/{product.id}/",
+                {"remove_images": [remove.id], "img": [_make_uploaded_image("a.png")]},
+            )
+
+        assert response.status_code == 200
+        assert len(response.data["images"]) == 1
+        assert response.data["images"][0]["id"] != remove.id
+        assert not models.ProductImage.objects.filter(pk=remove.pk).exists()
+
+    @pytest.mark.django_db
+    def test_product_images_scoped_to_correct_product(self, auth_client, category, presentation):
+        with patch("apps._api.mixins.publish_handler"):
+            first = auth_client.post(
+                "/api/store-mgmt/products/",
+                valid_product_payload(
+                    category, presentation, name="cookie", price="5.00", sku=6003,
+                    img=[_make_uploaded_image()],
+                ),
+            )
+            second = auth_client.post(
+                "/api/store-mgmt/products/",
+                valid_product_payload(
+                    category, presentation, name="cake", price="5.00", sku=6004,
+                    img=[_make_uploaded_image()],
+                ),
+            )
+
+        assert len(first.data["images"]) == 1
+        assert len(second.data["images"]) == 1
+        assert first.data["images"][0]["id"] != second.data["images"][0]["id"]
+
+    @pytest.mark.django_db
+    def test_product_image_url_is_absolute(self, api_client, product):
+        image = models.ProductImage.objects.create(product=product, img=_make_uploaded_image())
+        models.ProductImage.objects.filter(pk=image.pk).update(img="products/test.webp")
+
+        response = api_client.get(f"/api/store-mgmt/products/{product.slug}/")
+
+        assert response.status_code == 200
+        assert response.data["images"][0]["img"].startswith("http://testserver/media/")
+
+    @pytest.mark.django_db
     def test_product_detail_with_auth_shows_sensitive_fields(self, auth_client, product):
         response = auth_client.get(f"/api/store-mgmt/products/{product.id}/")
 
@@ -406,11 +548,11 @@ class TestApiViews:
         assert model_class.objects.filter(pk=response.data["id"]).exists()
 
     @pytest.mark.django_db
-    def test_product_create_update_delete_flow(self, auth_client):
+    def test_product_create_update_delete_flow(self, auth_client, category, presentation):
         with patch("apps._api.mixins.publish_handler") as publish_mock:
             create_response = auth_client.post(
                 "/api/store-mgmt/products/",
-                {"name": "cookie", "price": "5.00", "sku": 9991},
+                valid_product_payload(category, presentation, name="cookie", price="5.00", sku=9991),
             )
 
         assert create_response.status_code == 201
@@ -453,74 +595,86 @@ class TestApiViews:
         assert "name" in response.data
 
     @pytest.mark.django_db
-    def test_product_validation_price_min(self, auth_client):
+    def test_product_validation_price_min(self, auth_client, category, presentation):
         response = auth_client.post(
             "/api/store-mgmt/products/",
-            {"name": "cookie", "price": "0.00", "sku": 7771},
+            valid_product_payload(category, presentation, name="cookie", price="0.00", sku=7771),
         )
 
         assert response.status_code == 400
         assert "price" in response.data
 
     @pytest.mark.django_db
-    def test_product_validation_duplicate_active_name(self, auth_client, product):
+    def test_product_validation_duplicate_active_name(self, auth_client, product, category, presentation):
         response = auth_client.post(
             "/api/store-mgmt/products/",
-            {"name": product.name, "price": "5.00", "sku": 7772},
+            valid_product_payload(category, presentation, name=product.name, price="5.00", sku=7772),
         )
 
         assert response.status_code == 400
         assert "name" in response.data
 
     @pytest.mark.django_db
-    def test_product_validation_missing_fields(self, auth_client):
+    def test_product_validation_missing_fields(self, auth_client, category, presentation):
         response = auth_client.post(
             "/api/store-mgmt/products/",
-            {"name": "cookie", "sku": 7773},
+            valid_product_payload(category, presentation, name="cookie", sku=7773),
         )
 
         assert response.status_code == 201
         assert response.data["price"] == "0.00"
 
     @pytest.mark.django_db
-    def test_product_validation_blank_fields(self, auth_client):
+    def test_product_validation_blank_fields(self, auth_client, category, presentation):
         response = auth_client.post(
             "/api/store-mgmt/products/",
-            {"name": "", "price": "5.00", "sku": 7774},
+            valid_product_payload(category, presentation, name="", price="5.00", sku=7774),
         )
 
         assert response.status_code == 400
         assert "name" in response.data
 
     @pytest.mark.django_db
-    def test_product_validation_invalid_price_format(self, auth_client):
+    def test_product_validation_invalid_price_format(self, auth_client, category, presentation):
         response = auth_client.post(
             "/api/store-mgmt/products/",
-            {"name": "cookie", "price": "abc", "sku": 7775},
+            valid_product_payload(category, presentation, name="cookie", price="abc", sku=7775),
         )
 
         assert response.status_code == 400
         assert "price" in response.data
 
     @pytest.mark.django_db
-    def test_product_validation_price_decimal_places(self, auth_client):
+    def test_product_validation_price_decimal_places(self, auth_client, category, presentation):
         response = auth_client.post(
             "/api/store-mgmt/products/",
-            {"name": "cookie", "price": "5.123", "sku": 7776},
+            valid_product_payload(category, presentation, name="cookie", price="5.123", sku=7776),
         )
 
         assert response.status_code == 400
         assert "price" in response.data
 
     @pytest.mark.django_db
-    def test_product_validation_name_max_length(self, auth_client):
+    def test_product_validation_name_max_length(self, auth_client, category, presentation):
         response = auth_client.post(
             "/api/store-mgmt/products/",
-            {"name": "a" * 256, "price": "5.00", "sku": 7777},
+            valid_product_payload(category, presentation, name="a" * 256, price="5.00", sku=7777),
         )
 
         assert response.status_code == 400
         assert "name" in response.data
+
+    @pytest.mark.django_db
+    def test_product_validation_missing_category_presentation_description(self, auth_client):
+        response = auth_client.post(
+            "/api/store-mgmt/products/",
+            {"name": "cookie", "price": "5.00", "sku": 7778},
+        )
+
+        assert response.status_code == 400
+        assert "category" in response.data
+        assert "presentation" in response.data
+        assert "description" in response.data
 
     @pytest.mark.django_db
     def test_soft_delete_hides_from_list(self, auth_client, product):
@@ -620,14 +774,12 @@ class TestApiViews:
 
 class TestSerializers:
     @pytest.mark.django_db
-    def test_product_serializer_read_only_fields(self):
+    def test_product_serializer_read_only_fields(self, category, presentation):
         serializer = ProductSerializer(
-            data={
-                "name": "cookie",
-                "price": "5.00",
-                "sku": 6661,
-                "version": 99,
-            },
+            data=valid_product_payload(
+                category, presentation,
+                name="cookie", price="5.00", sku=6661, version=99,
+            ),
         )
 
         assert serializer.is_valid(), serializer.errors
@@ -720,48 +872,57 @@ class TestSerializers:
         assert models.Inventory.objects.get(store=store, product=product).quantity == 1
 
     @pytest.mark.django_db
-    def test_product_serializer_duplicate_active_name(self, product):
+    def test_product_serializer_duplicate_active_name(self, product, category, presentation):
         serializer = ProductSerializer(
-            data={"name": product.name, "price": "5.00", "sku": 5551},
+            data=valid_product_payload(category, presentation, name=product.name, price="5.00", sku=5551),
         )
 
         assert serializer.is_valid() is False
         assert "name" in serializer.errors
 
     @pytest.mark.django_db
-    def test_product_serializer_missing_fields(self):
-        serializer = ProductSerializer(data={"name": "cookie", "sku": 5552})
+    def test_product_serializer_missing_fields(self, category, presentation):
+        serializer = ProductSerializer(data=valid_product_payload(category, presentation, name="cookie", sku=5552))
 
         assert serializer.is_valid(), serializer.errors
         product = serializer.save()
         assert str(product.price) == "0.00"
 
     @pytest.mark.django_db
-    def test_product_serializer_blank_fields(self):
+    def test_product_serializer_blank_fields(self, category, presentation):
         serializer = ProductSerializer(
-            data={"name": "", "price": "5.00", "sku": 5553},
+            data=valid_product_payload(category, presentation, name="", price="5.00", sku=5553),
         )
 
         assert serializer.is_valid() is False
         assert "name" in serializer.errors
 
     @pytest.mark.django_db
-    def test_product_serializer_invalid_price_format(self):
+    def test_product_serializer_invalid_price_format(self, category, presentation):
         serializer = ProductSerializer(
-            data={"name": "cookie", "price": "abc", "sku": 5554},
+            data=valid_product_payload(category, presentation, name="cookie", price="abc", sku=5554),
         )
 
         assert serializer.is_valid() is False
         assert "price" in serializer.errors
 
     @pytest.mark.django_db
-    def test_product_serializer_price_decimal_places(self):
+    def test_product_serializer_price_decimal_places(self, category, presentation):
         serializer = ProductSerializer(
-            data={"name": "cookie", "price": "5.123", "sku": 5555},
+            data=valid_product_payload(category, presentation, name="cookie", price="5.123", sku=5555),
         )
 
         assert serializer.is_valid() is False
         assert "price" in serializer.errors
+
+    @pytest.mark.django_db
+    def test_product_serializer_missing_category_presentation_description(self):
+        serializer = ProductSerializer(data={"name": "cookie", "price": "5.00", "sku": 5556})
+
+        assert serializer.is_valid() is False
+        assert "category" in serializer.errors
+        assert "presentation" in serializer.errors
+        assert "description" in serializer.errors
 
 
 class TestModels:
