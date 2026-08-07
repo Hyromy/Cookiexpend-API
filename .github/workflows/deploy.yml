@@ -1,0 +1,66 @@
+name: Deploy to VPS
+
+on:
+  workflow_run:
+    workflows: ["Push Docker Image"]
+    types:
+      - completed
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy application via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+
+          script: |
+            docker pull ${{ vars.DOCKER_USER }}/${{ vars.DOCKER_IMAGE }}:latest
+
+            docker stop ${{ vars.CONTAINER_NAME }} || true
+            docker rm ${{ vars.CONTAINER_NAME }} || true
+
+            NETWORK_ARGS=""
+            if [ -n "${{ vars.DOCKER_NETWORK }}" ]; then
+              NETWORK_ARGS="--network ${{ vars.DOCKER_NETWORK }}"
+            fi
+
+            docker run -d \
+              --name ${{ vars.CONTAINER_NAME }} \
+              --restart always \
+              -v /home/${{ secrets.VPS_USER }}/media:/app/media \
+              -e 'PRODUCTION=True' \
+              -e 'DJANGO_SECRET_KEY=${{ secrets.DJANGO_SECRET_KEY }}' \
+              -e 'PRE_PRODUCTION=False' \
+              -e 'HOSTS=${{ vars.HOSTS }}' \
+              -e 'DEFAULT_FRONTEND=${{ vars.DEFAULT_FRONTEND }}' \
+              -e 'CORS_ALLOWED=${{ vars.CORS_ALLOWED }}' \
+              -e 'CSRF_TRUSTED=${{ vars.CSRF_TRUSTED }}' \
+              -e 'SESSION_DOMAIN=${{ vars.SESSION_DOMAIN }}' \
+              -e 'USE_SSL=True' \
+              -e 'DB_NAME=${{ vars.DB_NAME }}' \
+              -e 'DB_USER=${{ vars.DB_USER }}' \
+              -e 'DB_PASS=${{ secrets.DB_PASS }}' \
+              -e 'DB_HOST=${{ vars.DB_HOST }}' \
+              -e 'DB_PORT=${{ vars.DB_PORT }}' \
+              -e 'REDIS_URL=${{ vars.REDIS_URL }}' \
+              -e 'USE_EMAIL=True' \
+              -e 'EMAIL_HOST=${{ vars.EMAIL_HOST }}' \
+              -e 'EMAIL_PORT=${{ vars.EMAIL_PORT }}' \
+              -e 'EMAIL_HOST_USER=${{ vars.EMAIL_HOST_USER }}' \
+              -e 'EMAIL_HOST_PASSWORD=${{ secrets.EMAIL_HOST_PASSWORD }}' \
+              -e 'EMAIL_DOMAIN=${{ vars.EMAIL_DOMAIN }}' \
+              -e 'EMAIL_USERNAME=${{ vars.EMAIL_USERNAME }}' \
+              -p ${{ vars.VPS_PORT }}:8000 \
+              $NETWORK_ARGS \
+              ${{ vars.DOCKER_USER }}/${{ vars.DOCKER_IMAGE }}:latest
+
+            docker image prune -f
