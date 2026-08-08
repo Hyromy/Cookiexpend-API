@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     "apps._redis",
     "apps.catalog",
     "apps.store_mgmt",
+    "apps.sistemaMedicionIoT",
 ]
 
 MIDDLEWARE = [
