@@ -166,9 +166,6 @@ class Config(BaseSettings):
                     "SESSION_DOMAIN is required in production to handle safe cookies across subdomains."
                 )
 
-            if self.SESSION_DOMAIN.startswith("."):
-                self.SESSION_DOMAIN = self.SESSION_DOMAIN[1:]
-
         if self.USE_EMAIL:
             required_email_fields = [
                 "EMAIL_HOST",
