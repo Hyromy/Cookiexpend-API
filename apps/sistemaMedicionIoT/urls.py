@@ -1,14 +1,8 @@
 from django.urls import path
 
-from .views import MeasurementCreateAPIView
+from .views import measurements
 
 
 urlpatterns = [
-
-    path(
-        "measurements/",
-        MeasurementCreateAPIView.as_view(),
-        name="measurement-create",
-    ),
-
+    path("measurements/", measurements),
 ]
