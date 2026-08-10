@@ -2,6 +2,7 @@ from django.db import models
 
 from apps._api.models import BaseModel
 
+
 class Measurement(BaseModel):
 
     station = models.CharField(max_length=20)
