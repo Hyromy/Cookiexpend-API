@@ -11,11 +11,6 @@ class Measurement(BaseModel):
 
     time_ms = models.PositiveIntegerField()
 
-    time_seconds = models.DecimalField(
-        max_digits=10,
-        decimal_places=3
-    )
-
     class Meta(BaseModel.Meta):
         ordering = ["-created_at"]
 

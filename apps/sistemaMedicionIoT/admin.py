@@ -10,7 +10,6 @@ class MeasurementAdmin(admin.ModelAdmin):
         "station",
         "process",
         "time_ms",
-        "time_seconds",
         "created_at",
     )
 

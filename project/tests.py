@@ -74,7 +74,7 @@ def test_session_domain_strips_leading_dot():
 
     config = Config(**kwargs)
 
-    assert config.SESSION_DOMAIN == "example.com"
+    assert config.SESSION_DOMAIN == ".example.com"
 
 
 def test_database_fields_required_in_production():

@@ -17,7 +17,6 @@ class MeasurementViewSetTests(APITestCase):
             "station": "Pes-001",
             "process": "G001",
             "time_ms": 12500,
-            "time_seconds": 12.500,
         }
 
         # Usuario Bot

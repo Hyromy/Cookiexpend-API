@@ -13,6 +13,5 @@ class MeasurementSerializer(serializers.ModelSerializer):
             "station",
             "process",
             "time_ms",
-            "time_seconds",
             "created_at",
         ]
