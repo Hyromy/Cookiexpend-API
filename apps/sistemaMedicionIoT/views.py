@@ -1,35 +1,26 @@
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
-from rest_framework.permissions import BasePermission
 
-from apps._auth.permissions import permission
+from apps._auth.permissions import any_of, permission
 
 from .models import Measurement
 from .serializers import MeasurementSerializer
 
 
-class MeasurementPermission(BasePermission):
-
-    def has_permission(self, request, view):
-
-        if request.method == "GET":
-            return permission(
-                user=["Factory manager", "Store manager"],
-                can=["see"],
-            )().has_permission(request, view)
-
-        if request.method == "POST":
-            return permission(
-                user=["Bot"],
-                can=["create"],
-            )().has_permission(request, view)
-
-        return False
-
-
 @api_view(["GET", "POST"])
-@permission_classes([MeasurementPermission])
+@permission_classes([
+    any_of(
+        permission(
+            user=["Factory manager", "Store manager"],
+            can=["see"],
+        ),
+        permission(
+            user=["Bot"],
+            can=["create"],
+        ),
+    ),
+])
 def measurements(request):
 
     if request.method == "GET":
