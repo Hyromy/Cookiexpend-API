@@ -12,6 +12,7 @@ class Category(BaseModel):
     )
 
     class Meta(BaseModel.Meta):
+        ordering = ["order"]
         constraints = [
             unique_active_constraint("category", "label"),
         ]
@@ -36,6 +37,7 @@ class Presentation(BaseModel):
     order = models.PositiveSmallIntegerField(default=0)
 
     class Meta(BaseModel.Meta):
+        ordering = ["order"]
         constraints = [
             unique_active_constraint("presentation", "label"),
         ]

@@ -95,10 +95,12 @@ class ImgHelper:
 
         file_field = getattr(model, field_name, None)
 
-        if not file_field or not file_field.file:
+        if not file_field:
             return
 
         try:
+            if not file_field.file:
+                return
             file_field.file.seek(0)
             img_handler = Image.open(file_field.file)
         except Exception:

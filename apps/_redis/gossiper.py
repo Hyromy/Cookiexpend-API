@@ -17,6 +17,14 @@ MODEL = Literal[
     "sell_detail",
     "payment",
     "profile",
+    "category",
+    "presentation",
+    "gallery_item",
+    "faq",
+    "subject",
+    "department",
+    "brand",
+    "retailer",
 ]
 MODEL_VALUES = MODEL.__args__
 
