@@ -3,7 +3,7 @@ from typing import Literal
 
 from rest_framework.permissions import SAFE_METHODS, BasePermission
 
-USER_ROLE = Literal["Store manager", "Factory manager", "Public"]
+USER_ROLE = Literal["Store manager", "Factory manager", "Public", "Bot"]
 PERMISSION_TYPE = Literal[
     "see",
     "see_self",
