@@ -25,7 +25,6 @@ class Category(BaseModel):
             model=self,
             field_name="logo",
             methods=[
-                ImgHelper.Method.crop_to_square,
                 lambda img: ImgHelper.Method.scale(img, size=(512, 512)),
             ],
         )
@@ -111,7 +110,6 @@ class Brand(BaseModel):
             model=self,
             field_name="logo",
             methods=[
-                ImgHelper.Method.crop_to_square,
                 lambda img: ImgHelper.Method.scale(img, size=(512, 512)),
             ],
         )
@@ -143,7 +141,6 @@ class Retailer(BaseModel):
             model=self,
             field_name="logo",
             methods=[
-                ImgHelper.Method.crop_to_square,
                 lambda img: ImgHelper.Method.scale(img, size=(512, 512)),
             ],
         )
