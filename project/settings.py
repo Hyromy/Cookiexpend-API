@@ -171,14 +171,23 @@ CSRF_COOKIE_HTTPONLY = False
 if not DEBUG and config.SESSION_DOMAIN:
     CSRF_COOKIE_DOMAIN = config.SESSION_DOMAIN
     SESSION_COOKIE_DOMAIN = config.SESSION_DOMAIN
-SESSION_COOKIE_SAMESITE = "None"
-CSRF_COOKIE_SAMESITE = "None"
+
+# Browsers reject SameSite=None cookies when they are not Secure.
+# For local HTTP development, Lax keeps session auth working.
+if DEBUG or not config.USE_SSL:
+    SESSION_COOKIE_SAMESITE = "Lax"
+    CSRF_COOKIE_SAMESITE = "Lax"
+    SESSION_COOKIE_SECURE = False
+    CSRF_COOKIE_SECURE = False
+else:
+    SESSION_COOKIE_SAMESITE = "None"
+    CSRF_COOKIE_SAMESITE = "None"
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
 
 if not DEBUG:
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
     SECURE_SSL_REDIRECT = config.USE_SSL
-    SESSION_COOKIE_SECURE = not config.PRE_PRODUCTION
-    CSRF_COOKIE_SECURE = not config.PRE_PRODUCTION
 
     if not config.PRE_PRODUCTION:
         SECURE_HSTS_SECONDS = 31536000
