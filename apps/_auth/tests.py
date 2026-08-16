@@ -1,6 +1,7 @@
 from unittest.mock import patch
 
 import pytest
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.test import Client
 from rest_framework.test import APIClient
@@ -118,3 +119,36 @@ def test_logout_get_not_allowed(api_client, user):
     response = api_client.get("/auth/logout/")
 
     assert response.status_code == 405
+
+
+@pytest.mark.django_db
+def test_login_session_allows_me_with_same_client(api_client):
+    user_model = get_user_model()
+    user = user_model.objects.create_user(
+        username="sessionuser",
+        email="session@example.com",
+        password="pass1234",
+    )
+
+    login_response = api_client.post(
+        "/auth/login/",
+        {"email": user.email, "password": "pass1234"},
+        format="json",
+    )
+    assert login_response.status_code == 200
+    assert login_response.data["success"] is True
+
+    me_response = api_client.get("/auth/me/")
+    assert me_response.status_code == 200
+    assert me_response.data["id"] == user.id
+
+
+def test_local_cookie_defaults_are_browser_compatible():
+    # Browsers reject SameSite=None when Secure is false.
+    assert settings.SESSION_COOKIE_SAMESITE == settings.CSRF_COOKIE_SAMESITE
+    assert settings.SESSION_COOKIE_SECURE == settings.CSRF_COOKIE_SECURE
+
+    if settings.SESSION_COOKIE_SAMESITE == "None":
+        assert settings.SESSION_COOKIE_SECURE is True
+    else:
+        assert settings.SESSION_COOKIE_SAMESITE == "Lax"
